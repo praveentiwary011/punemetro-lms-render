@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 130" role="img" aria-label="Signature of Meera Joshi">
+  <g transform="rotate(0 210 65)" fill="none">
+    <text x="30" y="76" textLength="360" lengthAdjust="spacingAndGlyphs"
+          font-family="'Snell Roundhand','Brush Script MT','Bradley Hand',cursive" font-style="italic" font-size="54" fill="#1b2340">Meera Joshi</text>
+    <path d="M8 100 q 10 14 26 4" stroke="#1b2340" stroke-width="2" stroke-linecap="round"/>
+    <path d="M16 104 C 120 118, 300 114, 404 97" stroke="#1b2340" stroke-width="2.4" stroke-linecap="round"/>
+  </g>
+</svg>

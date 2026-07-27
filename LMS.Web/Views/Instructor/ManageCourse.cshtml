@@ -1,0 +1,436 @@
+@model Course
+@{
+    ViewData["Title"] = Model.Title;
+    var categories = (List<Category>)ViewBag.Categories;
+    // A course that requires an assessment cannot be published until one exists.
+    var hasAssessment = Model.Quizzes.Any(q => q.IsPublished && !q.IsSelfAssessment) || Model.Assignments.Any();
+    var blockedForAssessment = Model.RequiresAssessment && !hasAssessment && !Model.IsPublished;
+}
+<div class="nk-block-head nk-block-head-sm">
+    <div class="nk-block-between">
+        <div class="nk-block-head-content">
+            <h3 class="nk-block-title page-title">@Model.Title <span class="badge text-bg-light ms-1">@Model.Code</span></h3>
+            <div class="nk-block-des text-soft">
+                <p>
+                    @if (Model.IsPublished) { <span class="badge text-bg-success">Published</span> }
+                    else { <span class="badge text-bg-warning">Draft</span> }
+                    @if (Model.RequiresAssessment) { <span class="badge text-bg-info" title="Trainees must pass the quiz/assessment to complete this course"><em class="icon ni ni-check-circle me-1"></em>Assessment required</span> }
+                    @if (!Model.IsActive) { <span class="badge text-bg-danger">Deactivated</span> }
+                    &middot; @Model.Enrollments.Count students enrolled
+                </p>
+                @if (blockedForAssessment)
+                {
+                    <div class="alert alert-warning py-2 px-3 mt-1 mb-0 d-inline-flex align-items-center">
+                        <em class="icon ni ni-alert-circle me-2"></em>
+                        <span>This course requires a quiz/assessment to complete, but none is set up yet — add one under the <strong>Quizzes</strong> or <strong>Assignments</strong> tab before publishing.</span>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="nk-block-head-content">
+            <ul class="nk-block-tools g-2">
+                <li>
+                    <form method="post" asp-action="TogglePublish" class="m-0">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button class="btn btn-sm @(Model.IsPublished ? "btn-outline-warning" : "btn-success")">
+                            @(Model.IsPublished ? "Unpublish" : "Publish")
+                        </button>
+                    </form>
+                </li>
+                @if (Model.IsPublished)
+                {
+                    <li>
+                        <form method="post" asp-controller="Courses" asp-action="ToggleActive" asp-route-returnUrl="@($"/Instructor/ManageCourse/{Model.Id}")" class="m-0">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <button class="btn btn-sm @(Model.IsActive ? "btn-outline-danger" : "btn-outline-success")"
+                                    title="@(Model.IsActive ? "Hide from catalog and stop new enrollments" : "Restore to catalog")">
+                                @(Model.IsActive ? "Deactivate" : "Reactivate")
+                            </button>
+                        </form>
+                    </li>
+                }
+                <li><a class="btn btn-sm btn-outline-light" asp-action="Gradebook" asp-route-id="@Model.Id">Gradebook</a></li>
+                <li><a class="btn btn-sm btn-outline-light" asp-action="Attendance" asp-route-id="@Model.Id">Attendance</a></li>
+                <li><a class="btn btn-sm btn-outline-light" asp-controller="Discussions" asp-action="Index" asp-route-courseId="@Model.Id">Discussions</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs">
+    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-content">Content</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-assignments">Assignments (@Model.Assignments.Count)</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-quizzes">Quizzes (@Model.Quizzes.Count)</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-students">Students (@Model.Enrollments.Count)</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-announcements">Announcements</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-settings">Settings</a></li>
+</ul>
+
+<div class="tab-content">
+    <!-- CONTENT -->
+    <div class="tab-pane fade show active" id="tab-content">
+        @if (!Model.Modules.Any())
+        {
+            <div class="alert alert-info">
+                <em class="icon ni ni-bulb me-1"></em>
+                <strong>Continue building your course:</strong> add your first module below, then add lessons
+                (text, video, PDF or SCORM) inside it. Use the tabs above for quizzes and assignments,
+                and press <strong>Publish</strong> when the course is ready for trainees.
+            </div>
+        }
+        @foreach (var module in Model.Modules)
+        {
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-folder2-open me-2"></i>@module.Title</span>
+                    <form method="post" asp-action="DeleteModule" data-confirm="Delete this module and its lessons?">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@module.Id" />
+                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                </div>
+                <ul class="list-group list-group-flush">
+                    @foreach (var lesson in module.Lessons)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>
+                                <i class="bi @(lesson.Type == LessonType.Video ? "bi-play-circle" : lesson.Type == LessonType.File ? "bi-file-earmark" : lesson.Type == LessonType.Link ? "bi-link-45deg" : "bi-file-text") me-2"></i>
+                                @lesson.Title <span class="text-muted small">· @lesson.DurationMinutes min</span>
+                            </span>
+                            <form method="post" asp-action="DeleteLesson">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@lesson.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i></button>
+                            </form>
+                        </li>
+                    }
+                    <li class="list-group-item bg-light">
+                        <form method="post" asp-controller="Scorm" asp-action="Upload" enctype="multipart/form-data" class="row g-2 align-items-end mb-2">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="moduleId" value="@module.Id" />
+                            <div class="col-md-4"><input name="title" class="form-control form-control-sm" placeholder="SCORM 1.2 / cmi5 lesson title" required /></div>
+                            <div class="col-md-6"><input name="package" type="file" accept=".zip" class="form-control form-control-sm" required /></div>
+                            <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100"><em class="icon ni ni-package me-1"></em>Import package</button></div>
+                        </form>
+                        <form method="post" asp-action="AddLesson" enctype="multipart/form-data" class="row g-2 align-items-end">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="moduleId" value="@module.Id" />
+                            <div class="col-md-2"><input name="title" class="form-control form-control-sm" placeholder="Lesson title" required /></div>
+                            <div class="col-md-1">
+                                <select name="type" class="form-select form-select-sm" title="Lesson type">
+                                    <option value="0">Text</option><option value="1">Video</option><option value="2">PDF / File</option><option value="3">Link</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2"><input name="content" class="form-control form-control-sm" placeholder="Text/HTML content" /></div>
+                            <div class="col-md-2"><input name="url" class="form-control form-control-sm" placeholder="URL (video/link)" /></div>
+                            <div class="col-md-3"><input name="file" type="file" accept=".pdf,application/pdf,.pptx,.docx,.xlsx,image/*" class="form-control form-control-sm" style="min-width:0" title="Upload PDF / document / image (images auto-convert to PDF)" /></div>
+                            <div class="col-md-2">
+                                <div class="input-group input-group-sm">
+                                    <input name="durationMinutes" type="number" value="10" class="form-control form-control-sm" title="Duration in minutes" />
+                                    <button class="btn btn-sm btn-primary px-3" style="align-self:stretch">Add</button>
+                                </div>
+                            </div>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+        }
+        <form method="post" asp-action="AddModule" class="d-flex gap-2" style="max-width:420px">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="courseId" value="@Model.Id" />
+            <input name="title" class="form-control" placeholder="New module title" required />
+            <button class="btn btn-outline-primary text-nowrap"><i class="bi bi-plus-lg me-1"></i>Add module</button>
+        </form>
+    </div>
+
+    <!-- ASSIGNMENTS -->
+    <div class="tab-pane fade" id="tab-assignments">
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <div class="card">
+                    <ul class="list-group list-group-flush">
+                        @if (!Model.Assignments.Any())
+                        {
+                            <li class="list-group-item text-muted">No assignments yet.</li>
+                        }
+                        @foreach (var a in Model.Assignments)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <a asp-controller="Assignments" asp-action="Details" asp-route-id="@a.Id" class="text-decoration-none fw-semibold">@a.Title</a>
+                                    <div class="small text-muted">
+                                        @(a.DueDate != null ? $"Due {a.DueDate.Value:MMM d, yyyy}" : "No due date") · @a.MaxPoints pts
+                                    </div>
+                                </div>
+                                <form method="post" asp-controller="Assignments" asp-action="Delete" data-confirm="Delete assignment?">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@a.Id" />
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="card p-4">
+                    <h6 class="mb-3">New assignment</h6>
+                    <form method="post" asp-controller="Assignments" asp-action="Create">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="courseId" value="@Model.Id" />
+                        <div class="mb-2"><input name="title" class="form-control" placeholder="Title" required /></div>
+                        <div class="mb-2"><textarea name="description" class="form-control" rows="3" placeholder="Instructions"></textarea></div>
+                        <div class="row">
+                            <div class="col-6 mb-2"><input name="dueDate" type="datetime-local" class="form-control" /></div>
+                            <div class="col-6 mb-2"><input name="maxPoints" type="number" value="100" class="form-control" title="Max points" /></div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input name="allowLate" type="checkbox" value="true" checked class="form-check-input" id="late" />
+                            <label class="form-check-label" for="late">Allow late submissions</label>
+                        </div>
+                        <button class="btn btn-primary">Create</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QUIZZES -->
+    <div class="tab-pane fade" id="tab-quizzes">
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <div class="card">
+                    <ul class="list-group list-group-flush">
+                        @if (!Model.Quizzes.Any())
+                        {
+                            <li class="list-group-item text-muted">No quizzes yet.</li>
+                        }
+                        @foreach (var q in Model.Quizzes)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="fw-semibold">@q.Title</span>
+                                    @if (q.GeneratedByAi) { <span class="badge text-bg-info-subtle text-info-emphasis border border-info-subtle ms-1" title="Questions drafted by AI from this course's material — review before use"><em class="icon ni ni-spark-fill me-1"></em>AI-drafted</span> }
+                                    <div class="small text-muted">@q.Questions.Count questions · @q.TimeLimitMinutes min · @q.MaxAttempts attempts · pass @q.PassingScore%</div>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <a class="btn btn-sm btn-outline-primary" asp-controller="Quizzes" asp-action="Edit" asp-route-id="@q.Id">Edit</a>
+                                    <a class="btn btn-sm btn-outline-secondary" asp-controller="Quizzes" asp-action="Results" asp-route-id="@q.Id">Results</a>
+                                    <form method="post" asp-controller="Quizzes" asp-action="Delete" data-confirm="Delete quiz?">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@q.Id" />
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="card p-4">
+                    <h6 class="mb-3">New quiz / assessment</h6>
+                    <form method="post" asp-controller="Quizzes" asp-action="Create" id="newQuizForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="courseId" value="@Model.Id" />
+
+                        <label class="form-label small fw-semibold">How should the questions be created?</label>
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="radio" name="authorMode" id="qmTrainer" value="trainer" checked />
+                            <label class="form-check-label" for="qmTrainer">
+                                <strong>I'll write the questions</strong>
+                                <div class="small text-muted">Create the quiz, then add each question yourself.</div>
+                            </label>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="radio" name="authorMode" id="qmAi" value="ai" />
+                            <label class="form-check-label" for="qmAi">
+                                <strong>Generate with AI from this course's material</strong>
+                                <div class="small text-muted">The AI reads this course's lessons and writes the questions to fit your time limit. You review them before trainees see them.</div>
+                            </label>
+                        </div>
+
+                        <div class="mb-2"><input name="title" class="form-control" placeholder="Title" required /></div>
+                        <div class="mb-2"><textarea name="description" class="form-control" rows="2" placeholder="Description"></textarea></div>
+                        <div class="row">
+                            <div class="col-4 mb-2"><label class="form-label small">Time (min)</label><input name="timeLimitMinutes" id="qTime" type="number" value="30" min="5" max="180" class="form-control" /></div>
+                            <div class="col-4 mb-2"><label class="form-label small">Attempts</label><input name="maxAttempts" type="number" value="2" class="form-control" /></div>
+                            <div class="col-4 mb-2"><label class="form-label small">Pass %</label><input name="passingScore" type="number" value="60" class="form-control" /></div>
+                        </div>
+                        <div class="mb-3"><label class="form-label small">Due date (optional)</label><input name="dueDate" type="datetime-local" class="form-control" /></div>
+
+                        <div id="aiOptions" class="d-none border rounded p-2 mb-3 bg-light-subtle">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="includeWritten" id="qIncludeWritten" value="true" />
+                                <label class="form-check-label small" for="qIncludeWritten">
+                                    <strong>Include written (essay) questions</strong> — auto-marked against the course material
+                                </label>
+                            </div>
+                            <div class="small text-muted" id="aiPlan">The time limit decides how many questions are written.</div>
+                            <div class="small text-muted mt-1"><em class="icon ni ni-info me-1"></em>Generation runs on this server and can take a minute or two.</div>
+                        </div>
+
+                        <button class="btn btn-primary" id="btnTrainer">Create &amp; add questions</button>
+                        <button class="btn btn-primary d-none" id="btnAi" formaction="@Url.Action("CreateWithAi", "Quizzes")">
+                            <em class="icon ni ni-spark-fill me-1"></em>Generate assessment with AI
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STUDENTS -->
+    <div class="tab-pane fade" id="tab-students">
+        <div class="card">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Student</th><th>Email</th><th>Enrolled</th><th>Status</th><th>Final grade</th></tr></thead>
+                <tbody>
+                @foreach (var e in Model.Enrollments)
+                {
+                    <tr>
+                        <td>@e.Student?.FullName</td>
+                        <td>@e.Student?.Email</td>
+                        <td>@e.EnrolledAt.ToString("MMM d, yyyy")</td>
+                        <td>@e.Status</td>
+                        <td>@(e.FinalGrade?.ToString("0.#") ?? "—")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ANNOUNCEMENTS -->
+    <div class="tab-pane fade" id="tab-announcements">
+        <div class="row g-4">
+            <div class="col-lg-5">
+                <div class="card p-4">
+                    <h6 class="mb-3">Post announcement (notifies enrolled students)</h6>
+                    <form method="post" asp-action="AddAnnouncement">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="courseId" value="@Model.Id" />
+                        <div class="mb-2"><input name="title" class="form-control" placeholder="Title" required /></div>
+                        <div class="mb-3"><textarea name="body" class="form-control" rows="3" placeholder="Message" required></textarea></div>
+                        <button class="btn btn-primary">Post</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                <div class="card">
+                    <ul class="list-group list-group-flush">
+                        @foreach (var a in Model.Announcements.OrderByDescending(x => x.CreatedAt))
+                        {
+                            <li class="list-group-item">
+                                <strong>@a.Title</strong>
+                                <div class="small text-muted">@a.Body</div>
+                                <div class="small text-muted">@a.CreatedAt.ToString("MMM d, yyyy")</div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="tab-pane fade" id="tab-settings">
+        <div class="col-lg-6">
+            <div class="card p-4">
+                <form method="post" asp-action="UpdateCourse">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="mb-3"><label class="form-label">Title</label><input name="title" value="@Model.Title" class="form-control" required /></div>
+                    <div class="row">
+                        <div class="col-6 mb-3"><label class="form-label">Code</label><input name="code" value="@Model.Code" class="form-control" /></div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Category</label>
+                            <select name="categoryId" class="form-select">
+                                <option value="">None</option>
+                                @foreach (var c in categories)
+                                {
+                                    if (c.Id == Model.CategoryId) { <option selected value="@c.Id">@c.Name</option> }
+                                    else { <option value="@c.Id">@c.Name</option> }
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="4">@Model.Description</textarea></div>
+                    <div class="row">
+                        <div class="col-4 mb-3"><label class="form-label">Passing grade %</label><input name="passingGrade" type="number" value="@Model.PassingGrade" class="form-control" /></div>
+                        <div class="col-4 mb-3"><label class="form-label">Start</label><input name="startDate" type="date" value="@(Model.StartDate?.ToString("yyyy-MM-dd"))" class="form-control" /></div>
+                        <div class="col-4 mb-3"><label class="form-label">End</label><input name="endDate" type="date" value="@(Model.EndDate?.ToString("yyyy-MM-dd"))" class="form-control" /></div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input name="issuesCertificate" type="checkbox" value="true" class="form-check-input" id="certEdit" @(Model.IssuesCertificate ? "checked" : "") />
+                        <label class="form-check-label" for="certEdit">Issue certificate on completion</label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input name="requiresAssessment" type="checkbox" value="true" class="form-check-input" id="reqAssessEdit" @(Model.RequiresAssessment ? "checked" : "") />
+                        <label class="form-check-label" for="reqAssessEdit">Require passing the quiz/assessment to complete</label>
+                        <div class="form-text">Course completion and certificate are held until the trainee passes the course's quiz/assignment.</div>
+                    </div>
+                    <button class="btn btn-primary">Save settings</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script nonce="@Context.CspNonce()">
+    // Quiz authoring mode: trainer-written vs AI-generated from the course material.
+    (function () {
+        var form = document.getElementById('newQuizForm');
+        if (!form) return;
+        var aiOpts = document.getElementById('aiOptions');
+        var btnTrainer = document.getElementById('btnTrainer');
+        var btnAi = document.getElementById('btnAi');
+        var time = document.getElementById('qTime');
+        var written = document.getElementById('qIncludeWritten');
+        var plan = document.getElementById('aiPlan');
+
+        function isAi() { return document.getElementById('qmAi').checked; }
+
+        // Mirrors QuizBlueprint.ForTimeLimit so the trainer sees what the time limit buys.
+        function preview() {
+            var m = Math.min(180, Math.max(5, parseInt(time.value, 10) || 30));
+            var mcq, tf, subj = 0;
+            if (written.checked) {
+                mcq = Math.round(m * 0.45 / 1.0); tf = Math.round(m * 0.15 / 0.5); subj = Math.round(m * 0.40 / 5.0);
+            } else {
+                mcq = Math.round(m * 0.70 / 1.0); tf = Math.round(m * 0.30 / 0.5);
+            }
+            mcq = Math.max(1, mcq); tf = Math.max(1, tf); if (written.checked) subj = Math.max(1, subj);
+            if (mcq + tf + subj > 30) { mcq = Math.min(mcq, 15); tf = Math.min(tf, 8); subj = Math.min(subj, 7); }
+            var parts = [mcq + ' multiple-choice', tf + ' true/false'];
+            if (subj > 0) parts.push(subj + ' written');
+            plan.textContent = 'For ' + m + ' minutes the AI will write about ' + parts.join(', ') + '.';
+        }
+
+        function apply() {
+            var ai = isAi();
+            aiOpts.classList.toggle('d-none', !ai);
+            btnTrainer.classList.toggle('d-none', ai);
+            btnAi.classList.toggle('d-none', !ai);
+            if (ai) preview();
+        }
+
+        form.addEventListener('change', function (e) {
+            if (e.target.name === 'authorMode') apply();
+            if (e.target === written) preview();
+        });
+        time.addEventListener('input', function () { if (isAi()) preview(); });
+        // Generation takes a while — show progress and prevent a double submit.
+        btnAi.addEventListener('click', function () {
+            setTimeout(function () {
+                btnAi.disabled = true;
+                btnAi.textContent = 'Generating from course material…';
+            }, 0);
+        });
+        apply();
+    })();
+</script>
+}

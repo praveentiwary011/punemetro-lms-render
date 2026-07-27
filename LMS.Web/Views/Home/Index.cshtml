@@ -1,0 +1,37 @@
+@{
+    ViewData["Title"] = "Welcome";
+}
+<div class="row justify-content-center py-5">
+    <div class="col-lg-8 text-center">
+        <img src="~/images/logo_lms.png" alt="Learning Management System" style="max-height:72px" class="mb-4" />
+        <h1 class="nk-block-title fw-bold" style="font-size:2.4rem">Learning Management System</h1>
+        <p class="lead text-muted mt-3">
+            Multi-tenant training platform — courses, assessments, attendance, and certification
+            in one place, branded for each organisation onboarded. Sign in to see your organisation's workspace.
+        </p>
+        <div class="d-flex gap-3 justify-content-center mt-4">
+            <a class="btn btn-primary btn-lg" asp-controller="Account" asp-action="Login">Staff sign in</a>
+            <a class="btn btn-outline-primary btn-lg" asp-controller="Courses" asp-action="Catalog">Browse courses</a>
+        </div>
+        <div class="row mt-5 g-4">
+            <div class="col-md-4">
+                <div class="card card-bordered p-4">
+                    <div class="display-6 text-primary">@ViewBag.CourseCount</div>
+                    <div class="text-muted">Active training programmes</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card card-bordered p-4">
+                    <div class="display-6 text-primary">@ViewBag.StudentCount</div>
+                    <div class="text-muted">Staff in training</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card card-bordered p-4">
+                    <div class="display-6 text-primary"><em class="icon ni ni-award"></em></div>
+                    <div class="text-muted">Certification on completion</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

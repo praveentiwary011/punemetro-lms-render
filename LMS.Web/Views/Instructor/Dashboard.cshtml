@@ -1,0 +1,144 @@
+@{
+    ViewData["Title"] = "Trainer Dashboard";
+    var courses = (List<Course>)ViewBag.Courses;
+    var threads = (List<DiscussionThread>)ViewBag.RecentThreads;
+    var recentFeedback = (List<CourseFeedback>)ViewBag.RecentFeedback;
+    var sessions = (List<TrainingSession>)ViewBag.UpcomingSessions;
+    var completionRates = (Dictionary<int, double>)ViewBag.CompletionRates;
+    double avgRating = ViewBag.AvgRating;
+}
+<div class="nk-block-head nk-block-head-sm">
+    <div class="nk-block-between">
+        <div class="nk-block-head-content">
+            <h3 class="nk-block-title page-title">Trainer Dashboard</h3>
+            <div class="nk-block-des text-soft"><p>Your courses, sessions and student progress.</p></div>
+        </div>
+        <div class="nk-block-head-content">
+            <ul class="nk-block-tools g-2">
+                <li><a class="btn btn-sm btn-primary" asp-action="CreateCourse"><em class="icon ni ni-plus me-1"></em>New course</a></li>
+                <li><a class="btn btn-sm btn-outline-light" asp-controller="Training" asp-action="Sessions">Schedule session</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3"><div class="card p-3 stat-card"><div class="text-muted small text-uppercase">My active courses</div><div class="display-6">@courses.Count(c => c.IsPublished)</div><span class="small text-muted">@courses.Count(c => !c.IsPublished) in draft</span></div></div>
+    <div class="col-6 col-xl-3"><div class="card p-3 stat-card"><div class="text-muted small text-uppercase">Total students</div><div class="display-6">@ViewBag.TotalStudents</div><span class="small text-muted">across all courses</span></div></div>
+    <div class="col-6 col-xl-3"><div class="card p-3 stat-card"><div class="text-muted small text-uppercase">Avg course rating</div><div class="display-6">@(avgRating > 0 ? avgRating.ToString("0.0") : "—")<span class="fs-5 text-muted">/5</span></div><span class="small text-muted">@ViewBag.FeedbackCount reviews</span></div></div>
+    <div class="col-6 col-xl-3"><div class="card p-3 stat-card"><div class="text-muted small text-uppercase">Pending reviews</div><div class="display-6">@ViewBag.PendingGrading</div><span class="small text-muted">submissions to grade</span></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xxl-7">
+        <div class="card h-100">
+            <div class="card-header">Course completion rates</div>
+            <div class="table-responsive">
+            <table class="table mb-0 align-middle">
+                <thead><tr><th>Course</th><th>Students</th><th style="min-width:220px">Completion</th><th class="text-end"></th></tr></thead>
+                <tbody>
+                @foreach (var c in courses)
+                {
+                    var rate = completionRates.TryGetValue(c.Id, out var r) ? r : 0;
+                    <tr>
+                        <td><strong>@c.Code</strong><div class="small text-muted text-truncate" style="max-width:230px">@c.Title</div></td>
+                        <td>@c.Enrollments.Count</td>
+                        <td>
+                            <div class="progress"><div class="progress-bar" style="width:@(rate.ToString("0"))%;background:#6576ff"></div></div>
+                            <span class="small text-muted">@rate.ToString("0")% lessons completed</span>
+                        </td>
+                        <td class="text-end">
+                            @if (!c.IsPublished)
+                            {
+                                <a class="btn btn-sm btn-warning" asp-action="ManageCourse" asp-route-id="@c.Id">Continue building</a>
+                            }
+                            else
+                            {
+                                <a class="btn btn-sm btn-primary" asp-action="ManageCourse" asp-route-id="@c.Id">Manage</a>
+                            }
+                            <a class="btn btn-sm btn-outline-light" asp-action="Gradebook" asp-route-id="@c.Id">Gradebook</a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-5">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between"><span>Upcoming sessions</span><a class="small" asp-controller="Training" asp-action="Sessions">All sessions →</a></div>
+            <ul class="list-group list-group-flush">
+                @if (!sessions.Any())
+                {
+                    <li class="list-group-item text-muted">No sessions scheduled.</li>
+                }
+                @foreach (var s in sessions)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <strong>@s.Title</strong>
+                            @if (s.Mode == SessionMode.Online) { <span class="badge text-bg-info">Online</span> }
+                            else { <span class="badge text-bg-success">Offline</span> }
+                        </div>
+                        <div class="small text-muted">@(s.Course?.Code ?? "General") · @s.Start.ToString("ddd, MMM d · HH:mm")</div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xxl-5 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between"><span>Recent course feedback</span><a class="small" asp-controller="Feedback" asp-action="Index">All feedback →</a></div>
+            <ul class="list-group list-group-flush">
+                @if (!recentFeedback.Any())
+                {
+                    <li class="list-group-item text-muted">No feedback yet.</li>
+                }
+                @foreach (var f in recentFeedback)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <strong>@f.Course?.Code · @f.Student?.FullName</strong>
+                            <span class="text-warning">@(new string('★', f.Rating))</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(f.Comments)) { <div class="small text-muted">@f.Comments</div> }
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+    <div class="col-xxl-4 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between"><span>Student messages &amp; queries</span><a class="small" asp-controller="Communication" asp-action="Index">Inbox →</a></div>
+            <ul class="list-group list-group-flush">
+                @if (!threads.Any())
+                {
+                    <li class="list-group-item text-muted">No recent discussion activity.</li>
+                }
+                @foreach (var t in threads)
+                {
+                    <li class="list-group-item">
+                        <a asp-controller="Discussions" asp-action="Thread" asp-route-id="@t.Id" class="text-decoration-none">@t.Title</a>
+                        <div class="small text-muted">@t.Course?.Code · @t.Author?.FullName · @t.CreatedAt.ToString("MMM d")</div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+    <div class="col-xxl-3 col-lg-6">
+        <div class="card h-100 p-3">
+            <h6 class="mb-3">Quick actions</h6>
+            <div class="d-grid gap-2">
+                <a class="btn btn-sm btn-outline-light text-start" asp-action="CreateCourse"><em class="icon ni ni-plus me-1"></em>Create a course</a>
+                <a class="btn btn-sm btn-outline-light text-start" asp-controller="Training" asp-action="Sessions"><em class="icon ni ni-calendar-booking me-1"></em>Schedule a session</a>
+                <a class="btn btn-sm btn-outline-light text-start" asp-controller="Assessments" asp-action="Retakes"><em class="icon ni ni-repeat me-1"></em>Review retake requests</a>
+                <a class="btn btn-sm btn-outline-light text-start" asp-controller="Knowledge" asp-action="Documents"><em class="icon ni ni-upload me-1"></em>Upload a document</a>
+                <a class="btn btn-sm btn-outline-light text-start" asp-controller="Progress" asp-action="Departments"><em class="icon ni ni-growth me-1"></em>Department metrics</a>
+            </div>
+        </div>
+    </div>
+</div>

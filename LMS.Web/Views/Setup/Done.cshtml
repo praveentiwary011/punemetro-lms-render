@@ -1,0 +1,61 @@
+@using LMS.Web.Services.Setup
+@model SetupWizardState
+@{
+    Layout = null;
+    bool demo = ViewBag.DemoData == true;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Installation complete</title>
+    <style>
+        body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:#f4f5fb; color:#101828; }
+        .wrap { max-width:600px; margin:0 auto; padding:72px 20px; text-align:center; }
+        .card { background:#fff; border:1px solid #e4e7ec; border-radius:14px; padding:36px 30px; box-shadow:0 1px 3px rgba(16,24,40,.06); }
+        .tick { width:56px; height:56px; border-radius:50%; background:#ecfdf3; color:#067647; display:flex; align-items:center; justify-content:center; font-size:1.8rem; margin:0 auto 16px; }
+        h1 { font-size:1.35rem; margin:0 0 8px; }
+        p { color:#667085; margin:0 0 20px; line-height:1.5; }
+        a.btn { display:inline-block; background:#6576ff; color:#fff; text-decoration:none; padding:12px 24px; border-radius:9px; font-weight:600; }
+        a.btn:hover { background:#3b4ad6; }
+        .creds { background:#f9fafb; border:1px solid #e4e7ec; border-radius:10px; padding:14px; margin:0 0 22px; font-size:.9rem; text-align:left; }
+        .creds div { margin:3px 0; }
+        .next { text-align:left; font-size:.86rem; color:#667085; margin-top:24px; padding-top:18px; border-top:1px solid #e4e7ec; }
+        .next li { margin:5px 0; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <div class="tick">✓</div>
+            <h1>@(demo ? "Demo installation complete" : "Your LMS is ready")</h1>
+            <p>
+                @if (demo)
+                {
+                    <text>The demonstration dataset has been installed. Sign in with a demo account to explore the platform.</text>
+                }
+                else
+                {
+                    <text><strong>@Model.OrgName</strong> is set up and your administrator account has been created. Sign in to start adding people and courses.</text>
+                }
+            </p>
+            <div class="creds">
+                <div><strong>Sign in:</strong> @ViewBag.SignInEmail</div>
+                <div><strong>Password:</strong> @ViewBag.SignInHint</div>
+            </div>
+            <a class="btn" href="/">Go to the LMS</a>
+            <div class="next">
+                <strong>Suggested next steps</strong>
+                <ul>
+                    @if (demo) { <li>Change the demo passwords before any real use.</li> }
+                    <li>Add your people under <em>Administration → Users</em>.</li>
+                    <li>Upload your company logo and signatures for certificates.</li>
+                    <li>Create your first course and assessment under <em>Training Programs</em>.</li>
+                    <li>Put a TLS-terminating reverse proxy in front for HTTPS.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

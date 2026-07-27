@@ -1,0 +1,151 @@
+@model List<LMS.Web.Controllers.AdminController.OrganisationRow>
+@{
+    ViewData["Title"] = "Organisations";
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-buildings me-2"></i>Organisations</h2>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#onboardModal">
+        <i class="bi bi-plus-lg me-1"></i>Onboard organisation
+    </button>
+</div>
+<p class="text-muted">Each organisation is a tenant on the platform: its users, courses and custom roles belong to it. An organisation is operational only while its subscription license covers the current date; deactivating one blocks its users from signing in without deleting any data.</p>
+
+<div class="card">
+    <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Organisation</th><th>Code</th><th>Contact</th><th>Users</th><th>Courses</th><th>Custom roles</th><th>License</th><th>Status</th><th>Onboarded</th><th class="text-end">Actions</th></tr></thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="10" class="text-muted">No organisations onboarded yet.</td></tr>
+        }
+        @foreach (var row in Model)
+        {
+            <tr>
+                <td><strong>@row.Org.Name</strong>@if (!string.IsNullOrEmpty(row.Org.Address)) { <div class="small text-muted text-truncate" style="max-width:260px">@row.Org.Address</div> }</td>
+                <td><span class="badge text-bg-light border">@row.Org.Code</span></td>
+                <td class="small">@row.Org.ContactEmail<br />@row.Org.ContactPhone</td>
+                <td>@row.UserCount</td>
+                <td>@row.CourseCount</td>
+                <td>@row.RoleCount</td>
+                <td class="small">
+                    @if (row.Org.Code == LMS.Web.Services.Branding.OwnerOrgCode)
+                    {
+                        <span class="badge text-bg-light border">Platform owner</span>
+                    }
+                    else if (row.LicensePerpetual)
+                    {
+                        <span class="badge text-bg-success" title="Perpetual license — never expires"><i class="bi bi-infinity me-1"></i>Never expires</span>
+                    }
+                    else if (row.LicenseEnd == null)
+                    {
+                        <span class="badge text-bg-secondary">No license</span>
+                    }
+                    else
+                    {
+                        var dl = (int)(row.LicenseEnd.Value.Date - DateTime.UtcNow.Date).TotalDays;
+                        @if (dl < 0) { <span class="badge text-bg-danger">Expired @row.LicenseEnd.Value.ToString("dd MMM yyyy")</span> }
+                        else if (dl <= 61) { <span class="badge text-bg-warning">Expires in @dl d</span> }
+                        else { <span class="badge text-bg-success">Until @row.LicenseEnd.Value.ToString("dd MMM yyyy")</span> }
+                    }
+                </td>
+                <td>
+                    @if (row.Org.IsActive) { <span class="badge text-bg-success">Active</span> }
+                    else { <span class="badge text-bg-danger">Deactivated</span> }
+                </td>
+                <td class="small text-muted">@row.Org.CreatedAt.ToString("dd MMM yyyy")</td>
+                <td class="text-end">
+                    <div class="btn-group btn-group-sm">
+                        <a class="btn btn-outline-primary" asp-action="Organisation" asp-route-id="@row.Org.Id">Manage</a>
+                        <form method="post" asp-action="ToggleOrganisationActive" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@row.Org.Id" />
+                            <button class="btn @(row.Org.IsActive ? "btn-outline-danger" : "btn-outline-success")"
+                                    data-confirm="@(row.Org.IsActive ? "Deactivate" : "Activate") @row.Org.Name? Its users will @(row.Org.IsActive ? "no longer" : "again") be able to sign in.">
+                                @(row.Org.IsActive ? "Deactivate" : "Activate")
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<div class="modal fade" id="onboardModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-action="OnboardOrganisation" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="modal-header"><h5 class="modal-title">Onboard new organisation</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Organisation name <span class="text-danger">*</span></label><input name="name" class="form-control" placeholder="e.g. Nagpur Metro Rail Corporation" required /></div>
+                    <div class="mb-3"><label class="form-label">Code <span class="text-danger">*</span></label><input name="code" class="form-control text-uppercase" placeholder="Short unique code, e.g. NAGPURMETRO" maxlength="20" required /></div>
+                    <div class="mb-3">
+                        <label class="form-label">Company logo</label>
+                        <input name="logo" type="file" class="form-control" accept=".png,.jpg,.jpeg,.webp" />
+                        <div class="form-text">PNG, JPG or WebP, max 2 MB. Shown in the sidebar and header for this organisation's users. Can be added or replaced later.</div>
+                    </div>
+                    <fieldset class="border rounded p-2 mb-3">
+                        <legend class="float-none w-auto px-1 small text-muted mb-0">Subscription license</legend>
+                        <div class="row g-2">
+                            <div class="col-6"><label class="form-label small mb-1">Start date</label><input name="licenseStart" type="date" class="form-control form-control-sm" value="@DateTime.UtcNow.ToString("yyyy-MM-dd")" /></div>
+                            <div class="col-6">
+                                <label class="form-label small mb-1">Validity as</label>
+                                <select id="obLicMode" class="form-select form-select-sm">
+                                    <option value="months" selected>Number of months</option>
+                                    <option value="days">Number of days</option>
+                                    <option value="range">Date range (end date)</option>
+                                    <option value="never">Never expires</option>
+                                </select>
+                            </div>
+                            <div class="col-6 ob-lic-opt" data-mode="months"><label class="form-label small mb-1">Months</label><input name="licenseMonths" type="number" min="1" value="12" class="form-control form-control-sm" /></div>
+                            <div class="col-6 ob-lic-opt d-none" data-mode="days"><label class="form-label small mb-1">Days</label><input name="licenseDays" type="number" min="1" class="form-control form-control-sm" disabled /></div>
+                            <div class="col-6 ob-lic-opt d-none" data-mode="range"><label class="form-label small mb-1">End date</label><input name="licenseEnd" type="date" class="form-control form-control-sm" disabled /></div>
+                            <div class="col-6 ob-lic-opt d-none" data-mode="never"><label class="form-label small mb-1">&nbsp;</label><div class="form-control form-control-sm bg-light border-0 text-muted"><i class="bi bi-infinity me-1"></i>Perpetual — no expiry</div></div>
+                            <div class="col-6"><label class="form-label small mb-1">Reference</label><input name="licenseReference" class="form-control form-control-sm" placeholder="PO / contract" maxlength="100" /></div>
+                        </div>
+                        <input type="hidden" name="licenseNeverExpires" id="obLicNever" value="false" disabled />
+                        <div class="form-text">Exactly one validity option; without a license the organisation's users cannot sign in.</div>
+                    </fieldset>
+                    <div class="mb-3"><label class="form-label">Contact email</label><input name="contactEmail" type="email" class="form-control" /></div>
+                    <div class="mb-3"><label class="form-label">Contact phone</label><input name="contactPhone" class="form-control" /></div>
+                    <div class="mb-3"><label class="form-label">Address</label><textarea name="address" class="form-control" rows="2"></textarea></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary">Onboard</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script nonce="@Context.CspNonce()">
+    // Onboarding: exactly ONE license validity option may be entered
+    (function () {
+        var mode = document.getElementById('obLicMode');
+        if (!mode) return;
+        var never = document.getElementById('obLicNever');
+        function apply() {
+            document.querySelectorAll('.ob-lic-opt').forEach(function (col) {
+                var on = col.getAttribute('data-mode') === mode.value;
+                col.classList.toggle('d-none', !on);
+                var input = col.querySelector('input');
+                if (!input) return;                 // "never" column has no data input
+                input.disabled = !on;
+                if (!on) input.value = '';
+                else if (!input.value && input.name === 'licenseMonths') input.value = '12';
+            });
+            // The perpetual flag is submitted only when "Never expires" is selected
+            never.disabled = mode.value !== 'never';
+            never.value = mode.value === 'never' ? 'true' : 'false';
+        }
+        mode.addEventListener('change', apply);
+        apply();
+    })();
+</script>
+}

@@ -1,0 +1,27 @@
+@model List<Certificate>
+@{
+    ViewData["Title"] = "Certification Tracker";
+}
+<h2 class="mb-4"><em class="icon ni ni-award me-2"></em>Certification Tracker</h2>
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Staff member</th><th>Course</th><th>Final grade</th><th>Issued</th><th>Serial</th><th></th></tr></thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="6" class="text-muted">No certificates issued yet.</td></tr>
+        }
+        @foreach (var c in Model)
+        {
+            <tr>
+                <td>@c.Enrollment?.Student?.FullName</td>
+                <td>@c.Enrollment?.Course?.Code — @c.Enrollment?.Course?.Title</td>
+                <td>@(c.Enrollment?.FinalGrade?.ToString("0.#") ?? "—")%</td>
+                <td class="small">@c.IssuedAt.ToString("MMM d, yyyy")</td>
+                <td class="small text-muted">@c.SerialNumber</td>
+                <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-controller="Certificates" asp-action="Show" asp-route-id="@c.Id">View</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

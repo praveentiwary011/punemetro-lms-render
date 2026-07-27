@@ -1,0 +1,53 @@
+@model Course
+@{
+    ViewData["Title"] = "Discussions";
+}
+<nav class="small mb-2">
+    <a asp-controller="Courses" asp-action="Details" asp-route-id="@Model.Id" class="text-decoration-none">@Model.Title</a>
+    <span class="text-muted">/ Discussions</span>
+</nav>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-chat-dots me-2"></i>Discussions</h2>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newThreadModal"><i class="bi bi-plus-lg me-1"></i>New thread</button>
+</div>
+
+<div class="card">
+    <ul class="list-group list-group-flush">
+        @if (!Model.Threads.Any())
+        {
+            <li class="list-group-item text-muted">No discussions yet — start the first thread!</li>
+        }
+        @foreach (var t in Model.Threads)
+        {
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    @if (t.IsPinned) { <i class="bi bi-pin-angle-fill text-warning me-1" title="Pinned"></i> }
+                    @if (t.IsLocked) { <i class="bi bi-lock-fill text-muted me-1" title="Locked"></i> }
+                    <a asp-action="Thread" asp-route-id="@t.Id" class="text-decoration-none fw-semibold">@t.Title</a>
+                    <div class="small text-muted">@t.Author?.FullName · @t.CreatedAt.ToString("MMM d, yyyy")</div>
+                </div>
+                <span class="badge text-bg-light">@t.Posts.Count replies</span>
+            </li>
+        }
+    </ul>
+</div>
+
+<div class="modal fade" id="newThreadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-action="CreateThread">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="courseId" value="@Model.Id" />
+                <div class="modal-header"><h5 class="modal-title">New discussion</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><input name="title" class="form-control" placeholder="Topic title" required /></div>
+                    <div class="mb-3"><textarea name="body" class="form-control" rows="4" placeholder="What do you want to discuss?" required></textarea></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary">Post</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

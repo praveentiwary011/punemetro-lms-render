@@ -1,0 +1,98 @@
+@using LMS.Web.Services.Setup
+@model SetupWizardState
+@{
+    Layout = "_Wizard";
+    ViewData["Title"] = "Database";
+}
+<h1>Choose your database</h1>
+<p class="sub">Where the LMS stores everything. Pick the database your organisation runs — the LMS creates its own tables automatically.</p>
+
+<form method="post" asp-action="SaveDatabase" id="dbForm">
+    @Html.AntiForgeryToken()
+    <div class="opts">
+        <label class="opt" data-provider="PostgreSql">
+            <input type="radio" name="provider" value="PostgreSql" />
+            <span class="name">PostgreSQL <span class="tag">Recommended</span></span>
+            <div class="desc">Free and robust. Best choice for production and multiple app instances.</div>
+        </label>
+        <label class="opt" data-provider="Sqlite">
+            <input type="radio" name="provider" value="Sqlite" checked />
+            <span class="name">SQLite</span>
+            <div class="desc">Built in, zero setup, a single file. Ideal for pilots and single-server installs.</div>
+        </label>
+        <label class="opt" data-provider="SqlServer">
+            <input type="radio" name="provider" value="SqlServer" />
+            <span class="name">Microsoft SQL Server</span>
+            <div class="desc">For enterprises standardised on SQL Server (licensing applies).</div>
+        </label>
+        <label class="opt" data-provider="MySql">
+            <input type="radio" name="provider" value="MySql" />
+            <span class="name">MySQL / MariaDB</span>
+            <div class="desc">For teams standardised on MySQL or MariaDB.</div>
+        </label>
+    </div>
+
+    <div class="prov prov-Sqlite">
+        <div class="fld full">
+            <label class="lbl">Database file path</label>
+            <input type="text" name="sqlitePath" placeholder="/data/lms.db" />
+            <div class="hint">Leave blank for the default location. Use persistent storage so data survives restarts.</div>
+        </div>
+    </div>
+
+    <div class="prov prov-server" hidden>
+        <div class="row">
+            <div class="fld"><label class="lbl">Host</label><input type="text" name="host" placeholder="e.g. db.internal or 10.0.0.5" /></div>
+            <div class="fld"><label class="lbl">Port</label><input type="number" name="port" id="port" /></div>
+        </div>
+        <div class="fld"><label class="lbl">Database name</label><input type="text" name="database" placeholder="LmsDb" /></div>
+        <div class="row">
+            <div class="fld"><label class="lbl">Username</label><input type="text" name="username" autocomplete="off" /></div>
+            <div class="fld"><label class="lbl">Password</label><input type="password" name="password" autocomplete="new-password" /></div>
+        </div>
+        <div class="hint">Create an empty database first and give this user rights on it — the LMS builds the tables.</div>
+    </div>
+
+    <details style="margin-top:6px">
+        <summary style="cursor:pointer;color:var(--brandink);font-size:.85rem">Advanced: paste a full connection string</summary>
+        <div class="fld full" style="margin-top:10px">
+            <input type="text" name="rawConnectionString" placeholder="Overrides the fields above if provided" />
+        </div>
+    </details>
+
+    <div class="actions">
+        <a class="back" asp-action="Welcome">← Back</a>
+        <button type="button" class="btn btn-ghost" id="testBtn">Test connection</button>
+        <button type="submit" class="btn btn-primary">Continue</button>
+        <span class="result" id="testResult"></span>
+    </div>
+</form>
+
+@section Scripts {
+<script nonce="@Context.CspNonce()">
+    (function () {
+        var form = document.getElementById('dbForm');
+        var opts = Array.prototype.slice.call(document.querySelectorAll('.opt'));
+        var portDefaults = { PostgreSql: '5432', MySql: '3306', SqlServer: '1433' };
+        function selected() { var r = form.querySelector('input[name=provider]:checked'); return r ? r.value : 'Sqlite'; }
+        function apply() {
+            var p = selected();
+            opts.forEach(function (o) { o.classList.toggle('sel', o.getAttribute('data-provider') === p); });
+            var isSqlite = p === 'Sqlite';
+            document.querySelector('.prov-Sqlite').hidden = !isSqlite;
+            document.querySelector('.prov-server').hidden = isSqlite;
+            if (!isSqlite) document.getElementById('port').placeholder = portDefaults[p] || '';
+        }
+        form.addEventListener('change', function (e) { if (e.target.name === 'provider') apply(); });
+        apply();
+        document.getElementById('testBtn').addEventListener('click', function () {
+            var res = document.getElementById('testResult');
+            res.textContent = 'Testing…'; res.className = 'result';
+            fetch('@Url.Action("Test", "Setup")', { method: 'POST', body: new FormData(form) })
+                .then(function (r) { return r.json(); })
+                .then(function (j) { res.textContent = (j.ok ? '✓ ' : '✗ ') + j.message; res.className = 'result ' + (j.ok ? 'ok' : 'bad'); })
+                .catch(function () { res.textContent = '✗ Test failed to run.'; res.className = 'result bad'; });
+        });
+    })();
+</script>
+}

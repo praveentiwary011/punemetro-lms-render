@@ -1,0 +1,73 @@
+@model Course
+@{
+    ViewData["Title"] = "Gradebook";
+    var progress = (Dictionary<string, int>)ViewBag.Progress;
+    int totalLessons = ViewBag.TotalLessons;
+}
+<h2 class="mb-1"><i class="bi bi-table me-2"></i>Gradebook</h2>
+<p class="text-muted mb-4">@Model.Code — @Model.Title · passing grade @Model.PassingGrade%</p>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Progress</th>
+                    @foreach (var a in Model.Assignments)
+                    {
+                        <th class="text-center small">@a.Title<br /><span class="text-muted">/@a.MaxPoints.ToString("0.#")</span></th>
+                    }
+                    @foreach (var q in Model.Quizzes)
+                    {
+                        <th class="text-center small">@q.Title<br /><span class="text-muted">best %</span></th>
+                    }
+                    <th class="text-center">Final grade</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var e in Model.Enrollments)
+            {
+                var done = progress.TryGetValue(e.StudentId, out var d) ? d : 0;
+                var pct = totalLessons == 0 ? 0 : (int)((double)done / totalLessons * 100);
+                <tr>
+                    <td>@e.Student?.FullName</td>
+                    <td style="min-width:130px">
+                        <div class="progress"><div class="progress-bar" style="width:@(pct)%"></div></div>
+                        <span class="small text-muted">@pct%</span>
+                    </td>
+                    @foreach (var a in Model.Assignments)
+                    {
+                        var sub = a.Submissions.FirstOrDefault(s => s.StudentId == e.StudentId);
+                        <td class="text-center">
+                            @if (sub == null) { <span class="text-muted">—</span> }
+                            else if (sub.Grade == null) { <a asp-controller="Assignments" asp-action="Details" asp-route-id="@a.Id" class="badge text-bg-warning text-decoration-none">Grade</a> }
+                            else { @sub.Grade.Value.ToString("0.#") }
+                        </td>
+                    }
+                    @foreach (var q in Model.Quizzes)
+                    {
+                        var best = q.Attempts.Where(x => x.StudentId == e.StudentId && x.SubmittedAt != null)
+                                             .Select(x => x.MaxScore > 0 ? x.Score / x.MaxScore * 100 : 0)
+                                             .DefaultIfEmpty(-1).Max();
+                        <td class="text-center">@(best < 0 ? "—" : best.ToString("0.#"))</td>
+                    }
+                    <td class="text-center" style="min-width:170px">
+                        <form method="post" asp-action="FinalizeGrade" class="d-flex gap-1 justify-content-center">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="enrollmentId" value="@e.Id" />
+                            <input name="finalGrade" type="number" step="0.1" value="@(e.FinalGrade?.ToString("0.#"))" class="form-control form-control-sm" style="width:80px" required />
+                            <button class="btn btn-sm btn-primary">Save</button>
+                        </form>
+                        @if (e.Status == EnrollmentStatus.Completed)
+                        {
+                            <span class="badge text-bg-success mt-1">Completed</span>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+<p class="text-muted small mt-3">Saving a final grade at or above the passing grade marks the enrollment completed and issues a certificate (if enabled).</p>

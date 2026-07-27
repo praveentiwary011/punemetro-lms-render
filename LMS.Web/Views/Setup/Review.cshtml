@@ -1,0 +1,40 @@
+@using LMS.Web.Services.Setup
+@model SetupWizardState
+@inject DbSettings Db
+@{
+    Layout = "_Wizard";
+    ViewData["Title"] = "Review & install";
+    string ProviderLabel(DbProvider p) => p switch
+    {
+        DbProvider.PostgreSql => "PostgreSQL",
+        DbProvider.SqlServer => "Microsoft SQL Server",
+        DbProvider.MySql => "MySQL / MariaDB",
+        _ => "SQLite"
+    };
+}
+<h1>Review &amp; install</h1>
+<p class="sub">Everything is ready. Check the summary, then install — it takes a few seconds.</p>
+
+<table class="sum">
+    <tr><td class="k">Database</td><td><strong>@ProviderLabel(Db.Provider)</strong></td></tr>
+    <tr><td class="k">Organisation</td><td><strong>@Model.OrgName</strong> (@Model.OrgCode)</td></tr>
+    <tr><td class="k">Site name</td><td>@Model.SiteName</td></tr>
+    <tr><td class="k">Administrator</td><td>@Model.AdminName — @Model.AdminEmail@(Model.AdminIsSuperUser ? " (platform Super User)" : "")</td></tr>
+    <tr><td class="k">AI grading</td><td>@(Model.GradingEnabled ? $"Enabled · {(Model.GradingMode == LMS.Web.Models.GradingMode.Gpu ? "GPU (Qwen 2.5 14B)" : "CPU (Qwen 2.5 7B)")}" : "Disabled")<div class="hint">@Model.OllamaUrl</div></td></tr>
+</table>
+
+<form method="post" asp-action="Install" style="margin-top:18px">
+    @Html.AntiForgeryToken()
+    <label class="chk">
+        <input type="checkbox" name="installDemoData" value="true" />
+        <span>
+            <strong>Install the sample/demo dataset instead of a clean start</strong>
+            <div class="hint">Adds a fully-populated demonstration tenant (courses, trainees, history, certificates) for evaluation and training. <strong>Not for production</strong> — it replaces the organisation and administrator above with the built-in demo accounts.</div>
+        </span>
+    </label>
+
+    <div class="actions">
+        <a class="back" asp-action="Grading">← Back</a>
+        <button type="submit" class="btn btn-primary">Install now</button>
+    </div>
+</form>

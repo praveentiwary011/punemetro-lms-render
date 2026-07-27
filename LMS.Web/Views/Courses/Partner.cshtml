@@ -1,0 +1,25 @@
+@model List<PartnerCourse>
+@{
+    ViewData["Title"] = "Partner Courses";
+}
+<h2 class="mb-1"><em class="icon ni ni-network me-2"></em>Enroll (Partner) Courses</h2>
+<p class="text-muted mb-4">External courses from partner institutions — completion is tracked by the provider.</p>
+
+<div class="row g-4">
+    @if (!Model.Any())
+    {
+        <p class="text-muted">No partner courses available right now.</p>
+    }
+    @foreach (var p in Model)
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 p-4">
+                <span class="badge text-bg-info mb-2" style="width:fit-content">@p.Provider</span>
+                <h5>@p.Title</h5>
+                <p class="small text-muted flex-grow-1">@p.Description</p>
+                <div class="small text-muted mb-2">~@p.DurationHours hours</div>
+                <a class="btn btn-sm btn-primary" href="@p.Url" target="_blank">Go to course <em class="icon ni ni-external ms-1"></em></a>
+            </div>
+        </div>
+    }
+</div>

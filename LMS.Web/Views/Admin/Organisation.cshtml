@@ -1,0 +1,334 @@
+@model Organisation
+@{
+    ViewData["Title"] = Model.Name;
+    var users = (List<(ApplicationUser User, IList<string> Roles)>)ViewBag.Users;
+    var roleUsage = (Dictionary<string, int>)ViewBag.RoleUsage;
+
+    var today = DateTime.UtcNow.Date;
+    var isOwnerOrg = Model.Code == LMS.Web.Services.Branding.OwnerOrgCode;
+    var latestLicense = Model.Licenses.OrderByDescending(l => l.EndDate).FirstOrDefault();
+    var isPerpetual = latestLicense != null && latestLicense.IsPerpetual;
+    var licenseDaysLeft = latestLicense == null || isPerpetual ? (int?)null : (int)(latestLicense.EndDate.Date - today).TotalDays;
+    var suggestedStart = latestLicense != null && !isPerpetual && latestLicense.EndDate.Date >= today
+        ? latestLicense.EndDate.Date.AddDays(1) : today;
+}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="bi bi-building me-2"></i>@Model.Name
+        @if (Model.IsActive) { <span class="badge text-bg-success fs-6 align-middle">Active</span> }
+        else { <span class="badge text-bg-danger fs-6 align-middle">Deactivated</span> }
+        @if (!isOwnerOrg)
+        {
+            @if (isPerpetual) { <span class="badge text-bg-success fs-6 align-middle" title="Perpetual license — never expires"><i class="bi bi-infinity me-1"></i>Licensed — never expires</span> }
+            else if (licenseDaysLeft == null) { <span class="badge text-bg-secondary fs-6 align-middle">No license</span> }
+            else if (licenseDaysLeft < 0) { <span class="badge text-bg-danger fs-6 align-middle">License expired</span> }
+            else if (licenseDaysLeft <= 61) { <span class="badge text-bg-warning fs-6 align-middle">License expires in @licenseDaysLeft d</span> }
+            else { <span class="badge text-bg-success fs-6 align-middle">Licensed</span> }
+        }
+    </h2>
+    <a class="btn btn-outline-secondary btn-sm" asp-action="Organisations">← All organisations</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card p-3 mb-4">
+            <h6 class="mb-3">Organisation profile</h6>
+            <form method="post" asp-action="EditOrganisation" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-3 d-flex align-items-center gap-3">
+                    <img src="@(string.IsNullOrEmpty(Model.LogoUrl) ? "/images/logo_new.png" : Model.LogoUrl)"
+                         alt="@Model.Name logo" style="max-height:48px;max-width:160px;object-fit:contain"
+                         class="border rounded p-1 bg-white" />
+                    <div class="small text-muted">@(string.IsNullOrEmpty(Model.LogoUrl) ? "Using the platform default logo." : "Current company logo — shown to this organisation's users.")</div>
+                </div>
+                <div class="mb-2"><label class="form-label">Name</label><input name="name" class="form-control" value="@Model.Name" required /></div>
+                <div class="mb-2"><label class="form-label">Code</label><input name="code" class="form-control text-uppercase" value="@Model.Code" maxlength="20" required /></div>
+                <div class="mb-2">
+                    <label class="form-label">Company logo @(string.IsNullOrEmpty(Model.LogoUrl) ? "" : "(replace)")</label>
+                    <input name="logo" type="file" class="form-control" accept=".png,.jpg,.jpeg,.webp" />
+                    <div class="form-text">PNG, JPG or WebP, max 2 MB.</div>
+                </div>
+                <div class="mb-2"><label class="form-label">Contact email</label><input name="contactEmail" type="email" class="form-control" value="@Model.ContactEmail" /></div>
+                <div class="mb-2"><label class="form-label">Contact phone</label><input name="contactPhone" class="form-control" value="@Model.ContactPhone" /></div>
+                <div class="mb-3"><label class="form-label">Address</label><textarea name="address" class="form-control" rows="2">@Model.Address</textarea></div>
+                <button class="btn btn-primary btn-sm">Save changes</button>
+            </form>
+            <hr />
+            <div class="d-flex gap-4 text-muted small">
+                <span><strong>@users.Count</strong> users</span>
+                <span><strong>@ViewBag.CourseCount</strong> courses</span>
+                <span>Onboarded @Model.CreatedAt.ToString("dd MMM yyyy")</span>
+            </div>
+        </div>
+
+        @if (!isOwnerOrg)
+        {
+            <div class="card p-3 mb-4">
+                <h6 class="mb-1"><i class="bi bi-patch-check me-1"></i>Subscription license</h6>
+                <p class="text-muted small mb-2">The organisation is operational only while a license period covers the current date. Its Admins are notified two months before expiry, then weekly. History is append-only and audit-logged.</p>
+
+                @if (latestLicense == null)
+                {
+                    <div class="alert alert-warning py-2 small mb-3">No license on record — this organisation's users cannot sign in until one is added.</div>
+                }
+                else if (isPerpetual)
+                {
+                    <div class="alert alert-success py-2 small mb-3"><i class="bi bi-infinity me-1"></i><strong>Perpetual license</strong> — valid from @latestLicense.StartDate.ToString("dd MMM yyyy"), never expires. No expiry reminders are sent.</div>
+                }
+                else if (licenseDaysLeft < 0)
+                {
+                    <div class="alert alert-danger py-2 small mb-3">License <strong>expired on @latestLicense.EndDate.ToString("dd MMM yyyy")</strong> — users are blocked from signing in. Add the next licensing period below.</div>
+                }
+                else
+                {
+                    <div class="alert @(licenseDaysLeft <= 61 ? "alert-warning" : "alert-success") py-2 small mb-3">
+                        Licensed until <strong>@latestLicense.EndDate.ToString("dd MMM yyyy")</strong> (@licenseDaysLeft day(s) remaining)@(licenseDaysLeft <= 61 ? " — Admins are receiving expiry reminders." : ".")
+                    </div>
+                }
+
+                <form method="post" asp-action="AddOrganisationLicense" class="border-bottom pb-3 mb-3" id="licForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="organisationId" value="@Model.Id" />
+                    <div class="row g-2 align-items-end">
+                        <div class="col-6 col-xl-3">
+                            <label class="form-label small mb-1">Start date</label>
+                            <input name="startDate" type="date" class="form-control form-control-sm" value="@suggestedStart.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-6 col-xl-3">
+                            <label class="form-label small mb-1">Validity as</label>
+                            <select id="licMode" class="form-select form-select-sm">
+                                <option value="months" selected>Number of months</option>
+                                <option value="days">Number of days</option>
+                                <option value="range">Date range (end date)</option>
+                                <option value="never">Never expires</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-xl-2 lic-opt" data-mode="months">
+                            <label class="form-label small mb-1">Months</label>
+                            <input name="months" type="number" min="1" value="12" class="form-control form-control-sm" />
+                        </div>
+                        <div class="col-6 col-xl-2 lic-opt d-none" data-mode="days">
+                            <label class="form-label small mb-1">Days</label>
+                            <input name="days" type="number" min="1" class="form-control form-control-sm" disabled />
+                        </div>
+                        <div class="col-6 col-xl-2 lic-opt d-none" data-mode="range">
+                            <label class="form-label small mb-1">End date</label>
+                            <input name="endDate" type="date" class="form-control form-control-sm" disabled />
+                        </div>
+                        <div class="col-6 col-xl-2 lic-opt d-none" data-mode="never">
+                            <label class="form-label small mb-1">&nbsp;</label>
+                            <div class="form-control form-control-sm bg-light border-0 text-muted"><i class="bi bi-infinity me-1"></i>No expiry</div>
+                        </div>
+                        <div class="col-6 col-xl-2">
+                            <label class="form-label small mb-1">Reference</label>
+                            <input name="reference" class="form-control form-control-sm" placeholder="PO / contract" maxlength="100" />
+                        </div>
+                        <div class="col-12 col-xl-2">
+                            <button class="btn btn-sm btn-primary w-100">@(latestLicense == null ? "Add license" : "Add renewal")</button>
+                        </div>
+                    </div>
+                    <input type="hidden" name="neverExpires" id="licNever" value="false" disabled />
+                    <div class="form-text">Enter exactly one validity option — months or days run from the start date; "Never expires" issues a perpetual license.</div>
+                </form>
+
+                <h6 class="small text-uppercase text-muted mb-2">Licensing history</h6>
+                @if (!Model.Licenses.Any())
+                {
+                    <div class="text-muted small">No licensing periods recorded yet.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Period</th><th>Entered as</th><th>Reference</th><th>Added by</th><th>Added on</th><th>Status</th></tr></thead>
+                            <tbody>
+                            @foreach (var l in Model.Licenses.OrderByDescending(l => l.StartDate))
+                            {
+                                var st = l.IsPerpetual ? ("Current", "text-bg-success")
+                                       : l.EndDate.Date < today ? ("Expired", "text-bg-secondary")
+                                       : l.StartDate.Date > today ? ("Upcoming", "text-bg-info")
+                                       : ("Current", "text-bg-success");
+                                <tr>
+                                    <td class="text-nowrap">@l.StartDate.ToString("dd MMM yyyy") – @(l.IsPerpetual ? "Never expires" : l.EndDate.ToString("dd MMM yyyy"))</td>
+                                    <td class="small">@(l.IsPerpetual ? "Never expires" : l.ValidityType == LicenseValidityType.DateRange ? "Date range" : $"{l.ValidityValue} {l.ValidityType.ToString().ToLower()}")</td>
+                                    <td class="small">@(l.Reference ?? "—")</td>
+                                    <td class="small">@(l.CreatedBy?.FullName ?? "—")</td>
+                                    <td class="small text-nowrap">@l.CreatedAt.ToString("dd MMM yyyy")</td>
+                                    <td><span class="badge @st.Item2">@st.Item1</span></td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="card p-3">
+            <h6 class="mb-1">Roles for this organisation</h6>
+            <p class="text-muted small mb-3">Custom roles carry the organisation's own terminology and are <strong>mapped to a built-in LMS role</strong> (Trainee, Trainer, Principal or Admin) — holders inherit the mapped role's capabilities. Created roles are listed below; assign them from the <a asp-action="Users" asp-route-organisationId="@Model.Id">Users page</a>. The organisation's own Admin manages these under Administration → Organisation Roles.</p>
+
+            <form method="post" asp-action="AddOrganisationRole" class="border-bottom pb-3 mb-3">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="organisationId" value="@Model.Id" />
+                <div class="row g-2">
+                    <div class="col-4"><input name="name" class="form-control form-control-sm" placeholder="New role name" required maxlength="80" /></div>
+                    <div class="col-3"><input name="description" class="form-control form-control-sm" placeholder="Description (optional)" maxlength="200" /></div>
+                    <div class="col-3">
+                        <select name="mapsTo" class="form-select form-select-sm" title="Map to built-in LMS role" required>
+                            @foreach (var m in LMS.Web.Controllers.AdminController.MappableRoles)
+                            {
+                                <option value="@m.Role">Map to @m.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-2"><button class="btn btn-sm btn-primary w-100">Add</button></div>
+                </div>
+            </form>
+
+            @if (!Model.Roles.Any())
+            {
+                <div class="text-muted small">No custom roles created yet.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Role</th><th>Mapped to</th><th>Users</th><th style="min-width:12rem">Re-map</th><th class="text-end"></th></tr></thead>
+                        <tbody>
+                        @foreach (var role in Model.Roles.OrderBy(r => r.Name))
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@role.Name</strong>
+                                    @if (!string.IsNullOrEmpty(role.Description)) { <div class="small text-muted">@role.Description</div> }
+                                </td>
+                                <td><span class="badge text-bg-info">@(LMS.Web.Controllers.AdminController.MappableRoles.First(m => m.Role == role.MapsToRole).Label)</span></td>
+                                <td>@(roleUsage.TryGetValue(role.Name, out var n) ? n : 0)</td>
+                                <td>
+                                    <form method="post" asp-action="MapOrganisationRole" class="d-flex align-items-center gap-1">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@role.Id" />
+                                        <select name="mapsTo" class="form-select form-select-sm" title="Re-map to a different LMS role">
+                                            @foreach (var m in LMS.Web.Controllers.AdminController.MappableRoles)
+                                            {
+                                                if (m.Role == role.MapsToRole) { <option selected value="@m.Role">@m.Label</option> }
+                                                else { <option value="@m.Role">@m.Label</option> }
+                                            }
+                                        </select>
+                                        <button class="btn btn-sm btn-outline-primary" title="Apply mapping">Map</button>
+                                    </form>
+                                </td>
+                                <td class="text-end">
+                                    <form method="post" asp-action="DeleteOrganisationRole" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@role.Id" />
+                                        <button class="btn btn-sm btn-outline-danger" data-confirm="Delete role @role.Name?" title="Delete (only when no user holds it)"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <div class="card p-3 mt-4">
+            <h6 class="mb-1"><i class="bi bi-geo-alt me-1"></i>Training locations &amp; rooms</h6>
+            <p class="text-muted small mb-3">Venues where this organisation runs classroom training. They are suggested automatically in the <a asp-controller="Instructor" asp-action="Batches">Batch Set-up</a> form.</p>
+
+            <ul class="list-group list-group-flush mb-3">
+                @if (!Model.Locations.Any())
+                {
+                    <li class="list-group-item text-muted small px-0">No training locations yet — add the first one below.</li>
+                }
+                @foreach (var loc in Model.Locations.OrderBy(l => l.Name).ThenBy(l => l.Room))
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span>
+                            @loc.Name
+                            @if (!string.IsNullOrEmpty(loc.Room)) { <div class="small text-muted">@loc.Room</div> }
+                        </span>
+                        <form method="post" asp-action="DeleteTrainingLocation" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@loc.Id" />
+                            <button class="btn btn-sm btn-outline-danger" data-confirm="Remove @loc.Name?" title="Remove"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </li>
+                }
+            </ul>
+
+            <form method="post" asp-action="AddTrainingLocation" class="border-top pt-3">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="organisationId" value="@Model.Id" />
+                <div class="row g-2">
+                    <div class="col-5"><input name="name" class="form-control form-control-sm" placeholder="Training location" required maxlength="200" /></div>
+                    <div class="col-5"><input name="room" class="form-control form-control-sm" placeholder="Room details (optional)" maxlength="200" /></div>
+                    <div class="col-2"><button class="btn btn-sm btn-primary w-100">Add</button></div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Users in @Model.Name</span>
+                <a class="btn btn-sm btn-outline-primary" asp-action="Users" asp-route-organisationId="@Model.Id">Manage users</a>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th></tr></thead>
+                <tbody>
+                @if (!users.Any())
+                {
+                    <tr><td colspan="4" class="text-muted">No users yet. Create them from the <a asp-action="Users">Users page</a> and pick this organisation.</td></tr>
+                }
+                @foreach (var (user, roles) in users)
+                {
+                    <tr>
+                        <td>@user.FullName</td>
+                        <td class="small">@user.Email</td>
+                        <td><span class="badge text-bg-secondary">@string.Join(", ", roles)</span></td>
+                        <td>
+                            @if (user.IsActive) { <span class="badge text-bg-success">Active</span> }
+                            else { <span class="badge text-bg-danger">Deactivated</span> }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script nonce="@Context.CspNonce()">
+    // Subscription license: exactly ONE validity option may be entered — the mode
+    // selector shows/enables only the chosen input (server re-validates).
+    (function () {
+        var mode = document.getElementById('licMode');
+        if (!mode) return;
+        var never = document.getElementById('licNever');
+        var startInput = document.querySelector('#licForm input[name="startDate"]');
+        function apply() {
+            document.querySelectorAll('#licForm .lic-opt').forEach(function (col) {
+                var on = col.getAttribute('data-mode') === mode.value;
+                col.classList.toggle('d-none', !on);
+                var input = col.querySelector('input');
+                if (!input) return;            // "never" column has no data input
+                input.disabled = !on;          // disabled inputs are not submitted
+                if (!on) input.value = '';
+                else if (!input.value && input.name === 'months') input.value = '12';
+            });
+            // The perpetual flag is submitted only when "Never expires" is selected
+            never.disabled = mode.value !== 'never';
+            never.value = mode.value === 'never' ? 'true' : 'false';
+            // Start date stays required (perpetual runs from the start date)
+            if (startInput) startInput.required = true;
+        }
+        mode.addEventListener('change', apply);
+        apply();
+    })();
+</script>
+}

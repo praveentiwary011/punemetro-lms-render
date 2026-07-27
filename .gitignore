@@ -1,0 +1,9 @@
+# build output & local data — never publish these
+**/bin/
+**/obj/
+*.db
+*.db-shm
+*.db-wal
+LMS.Web/wwwroot/uploads/
+LMS.Web/wwwroot/scorm/
+.DS_Store

@@ -1,0 +1,86 @@
+@model Organisation
+@{
+    ViewData["Title"] = "Organisation Roles";
+    var roleUsage = (Dictionary<string, int>)ViewBag.RoleUsage;
+    var mappable = LMS.Web.Controllers.AdminController.MappableRoles;
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-shield-lock me-2"></i>Organisation Roles</h2>
+</div>
+<p class="text-muted" style="max-width:60rem">Create roles in @Model.Name's own terminology and <strong>map each to a built-in LMS role</strong> — Trainee, Trainer, Principal or Admin. A user holding one of your roles automatically receives the mapped LMS role's menus and permissions; the custom name is what your organisation sees. Roles appear in the list below once created; assign them to people from the <a asp-action="Users">Users page</a>.</p>
+
+<div class="row">
+    <div class="col-xxl-9">
+        <div class="card p-3 mb-4">
+            <h6 class="mb-2">Create a role</h6>
+            <form method="post" asp-action="AddOrganisationRole">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="organisationId" value="@Model.Id" />
+                <div class="row g-2">
+                    <div class="col-md-4"><input name="name" class="form-control form-control-sm" placeholder="New role name (your terminology)" required maxlength="80" /></div>
+                    <div class="col-md-3"><input name="description" class="form-control form-control-sm" placeholder="Description (optional)" maxlength="200" /></div>
+                    <div class="col-md-3">
+                        <select name="mapsTo" class="form-select form-select-sm" title="Map to built-in LMS role" required>
+                            @foreach (var m in mappable)
+                            {
+                                <option value="@m.Role">Map to @m.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Add role</button></div>
+                </div>
+                <div class="form-text">Role names are unique across the platform; the mapped LMS role decides what its holders can do.</div>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="card-header">@Model.Name — roles</div>
+            @if (!Model.Roles.Any())
+            {
+                <div class="p-4 text-muted">No roles created yet. Add your first role above — it will be listed here once created.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead><tr><th>Role</th><th>Mapped LMS role</th><th>Users</th><th style="min-width:15rem">Re-map</th><th class="text-end">Actions</th></tr></thead>
+                        <tbody>
+                        @foreach (var role in Model.Roles.OrderBy(r => r.Name))
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@role.Name</strong>
+                                    @if (!string.IsNullOrEmpty(role.Description)) { <div class="small text-muted">@role.Description</div> }
+                                </td>
+                                <td><span class="badge text-bg-info">@(mappable.First(m => m.Role == role.MapsToRole).Label)</span></td>
+                                <td>@(roleUsage.TryGetValue(role.Name, out var n) ? n : 0)</td>
+                                <td>
+                                    <form method="post" asp-action="MapOrganisationRole" class="d-flex align-items-center gap-1">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@role.Id" />
+                                        <select name="mapsTo" class="form-select form-select-sm" title="Re-map to a different LMS role">
+                                            @foreach (var m in mappable)
+                                            {
+                                                if (m.Role == role.MapsToRole) { <option selected value="@m.Role">@m.Label</option> }
+                                                else { <option value="@m.Role">@m.Label</option> }
+                                            }
+                                        </select>
+                                        <button class="btn btn-sm btn-outline-primary" title="Apply mapping">Map</button>
+                                    </form>
+                                </td>
+                                <td class="text-end">
+                                    <form method="post" asp-action="DeleteOrganisationRole" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@role.Id" />
+                                        <button class="btn btn-sm btn-outline-danger" data-confirm="Delete role @role.Name?" title="Delete (only when no user holds it)"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

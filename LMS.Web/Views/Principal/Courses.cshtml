@@ -1,0 +1,48 @@
+@model List<Course>
+@{
+    ViewData["Title"] = "Course Oversight";
+}
+<div class="nk-block-head nk-block-head-sm">
+    <div class="nk-block-between">
+        <div class="nk-block-head-content">
+            <h3 class="nk-block-title page-title">Course Oversight</h3>
+            <div class="nk-block-des text-soft"><p>Deactivate a published course to hide it from the catalog and stop new enrollments — learners already enrolled keep access.</p></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Course</th><th>Trainer</th><th>Enrolled</th><th>Status</th><th class="text-end">Action</th></tr></thead>
+        <tbody>
+        @foreach (var c in Model)
+        {
+            <tr>
+                <td><strong>@c.Code</strong> — @c.Title<div class="small text-muted">@c.Category?.Name</div></td>
+                <td>@c.Instructor?.FullName</td>
+                <td>@c.Enrollments.Count</td>
+                <td>
+                    @if (!c.IsPublished) { <span class="badge text-bg-warning">Draft</span> }
+                    else if (!c.IsActive) { <span class="badge text-bg-danger">Deactivated</span> }
+                    else { <span class="badge text-bg-success">Active</span> }
+                </td>
+                <td class="text-end">
+                    <a class="btn btn-sm @(c.IsPublished ? "btn-outline-primary" : "btn-warning")" asp-controller="Instructor" asp-action="ManageCourse" asp-route-id="@c.Id">
+                        @(c.IsPublished ? "Open" : "Continue building")
+                    </a>
+                    @if (c.IsPublished)
+                    {
+                        <form method="post" asp-controller="Courses" asp-action="ToggleActive" asp-route-returnUrl="/Principal/Courses">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@c.Id" />
+                            <button class="btn btn-sm @(c.IsActive ? "btn-outline-danger" : "btn-outline-success")">
+                                @(c.IsActive ? "Deactivate" : "Reactivate")
+                            </button>
+                        </form>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,107 @@
+@model List<Message>
+@{
+    ViewData["Title"] = "Communication Center";
+    string box = ViewBag.Box;
+    var recipients = (Dictionary<string, List<ApplicationUser>>)ViewBag.Recipients;
+    bool canBroadcast = ViewBag.CanBroadcast;
+    var myCourses = (List<Course>)ViewBag.MyCourses;
+    bool isTrainerOnly = User.IsInRole("Instructor") && !User.IsInRole("Admin") && !User.IsInRole("Principal");
+}
+<h2 class="mb-1"><i class="bi bi-chat-square-text me-2"></i>Communication Center</h2>
+<p class="text-muted mb-4">
+    @if (User.IsInRole("Admin")) { <text>As <strong>Admin</strong> you can message and broadcast to everyone.</text> }
+    else if (User.IsInRole("Principal")) { <text>As <strong>Principal</strong> you can message and broadcast to all trainers and trainees.</text> }
+    else if (User.IsInRole("Instructor")) { <text>As a <strong>trainer</strong> you can message your trainees, fellow trainers, the Principal and Admin — and broadcast to your courses.</text> }
+    else { <text>You can message your trainers, the Principal, and Admin.</text> }
+</p>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item"><a class="nav-link @(box == "inbox" ? "active" : "")" asp-action="Index" asp-route-box="inbox">Inbox</a></li>
+            <li class="nav-item"><a class="nav-link @(box == "sent" ? "active" : "")" asp-action="Index" asp-route-box="sent">Sent</a></li>
+        </ul>
+        <div class="card">
+            <ul class="list-group list-group-flush">
+                @if (!Model.Any())
+                {
+                    <li class="list-group-item text-muted">No messages.</li>
+                }
+                @foreach (var m in Model)
+                {
+                    var counterpart = box == "sent" ? m.Recipient : m.Sender;
+                    <li class="list-group-item d-flex justify-content-between align-items-center @(box == "inbox" && m.ReadAt == null ? "fw-semibold" : "")">
+                        <div class="text-truncate">
+                            <span class="avatar-sm me-2">@(string.IsNullOrEmpty(counterpart?.FullName) ? "?" : counterpart!.FullName[..1])</span>
+                            <a asp-action="Read" asp-route-id="@m.Id" class="text-decoration-none text-reset">
+                                @(box == "sent" ? "To: " : "")@counterpart?.FullName — @m.Subject
+                            </a>
+                        </div>
+                        <span class="small text-muted text-nowrap ms-2">@m.SentAt.ToString("MMM d, HH:mm")</span>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card p-4 mb-4">
+            <h6 class="mb-3"><i class="bi bi-pencil-square me-1"></i>New message</h6>
+            <form method="post" asp-action="Send">
+                @Html.AntiForgeryToken()
+                <div class="mb-2">
+                    <select name="recipientId" class="form-select" required>
+                        <option value="">Select recipient…</option>
+                        @foreach (var group in recipients)
+                        {
+                            <optgroup label="@group.Key">
+                                @foreach (var u in group.Value)
+                                {
+                                    <option value="@u.Id">@u.FullName</option>
+                                }
+                            </optgroup>
+                        }
+                    </select>
+                </div>
+                <div class="mb-2"><input name="subject" class="form-control" placeholder="Subject" required /></div>
+                <div class="mb-3"><textarea name="body" class="form-control" rows="4" placeholder="Message" required></textarea></div>
+                <button class="btn btn-primary w-100">Send</button>
+            </form>
+        </div>
+
+        @if (canBroadcast)
+        {
+            <div class="card p-4">
+                <h6 class="mb-3"><i class="bi bi-broadcast me-1"></i>Broadcast</h6>
+                <form method="post" asp-action="Broadcast">
+                    @Html.AntiForgeryToken()
+                    @if (isTrainerOnly)
+                    {
+                        <div class="mb-2">
+                            <select name="courseId" class="form-select" required>
+                                <option value="">To trainees of course…</option>
+                                @foreach (var c in myCourses)
+                                {
+                                    <option value="@c.Id">@c.Code — @c.Title</option>
+                                }
+                            </select>
+                        </div>
+                        <input type="hidden" name="audience" value="course" />
+                    }
+                    else
+                    {
+                        <div class="mb-2">
+                            <select name="audience" class="form-select">
+                                <option value="all">Everyone</option>
+                                <option value="trainers">All trainers</option>
+                                <option value="trainees">All trainees</option>
+                            </select>
+                        </div>
+                    }
+                    <div class="mb-2"><input name="subject" class="form-control" placeholder="Subject" required /></div>
+                    <div class="mb-3"><textarea name="body" class="form-control" rows="3" placeholder="Announcement message" required></textarea></div>
+                    <button class="btn btn-outline-primary w-100">Send broadcast</button>
+                </form>
+            </div>
+        }
+    </div>
+</div>

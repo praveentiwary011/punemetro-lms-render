@@ -1,0 +1,40 @@
+@model List<Course>
+@{
+    CourseKind kind = ViewBag.Kind;
+    var title = kind switch
+    {
+        CourseKind.Compliance => "Mandatory Compliance Training",
+        CourseKind.Leadership => "Leadership Programs",
+        CourseKind.RoleSpecific => "Role-Specific Skill Development",
+        CourseKind.Onboarding => "Onboarding / Induction",
+        _ => "Technical / Domain Courses"
+    };
+    ViewData["Title"] = title;
+    var myEnrollments = (List<int>)ViewBag.MyEnrollments;
+}
+<h2 class="mb-4"><em class="icon ni ni-signal me-2"></em>@title</h2>
+
+<div class="row g-4">
+    @if (!Model.Any())
+    {
+        <p class="text-muted">No published courses in this learning path yet.</p>
+    }
+    @foreach (var c in Model)
+    {
+        <div class="col-md-6 col-lg-4 col-xl-3">
+            <div class="card h-100">
+                <div class="course-thumb"><em class="icon ni ni-book"></em></div>
+                <div class="card-body d-flex flex-column">
+                    <div class="mb-1">
+                        <span class="badge text-bg-light">@c.Code</span>
+                        @if (myEnrollments.Contains(c.Id)) { <span class="badge text-bg-success">Enrolled</span> }
+                    </div>
+                    <h5>@c.Title</h5>
+                    <p class="small text-muted flex-grow-1">@(c.Description.Length > 100 ? c.Description[..100] + "…" : c.Description)</p>
+                    <div class="small text-muted mb-2">@c.Instructor?.FullName · @c.Enrollments.Count enrolled</div>
+                    <a class="btn btn-sm btn-primary" asp-action="Details" asp-route-id="@c.Id">View course</a>
+                </div>
+            </div>
+        </div>
+    }
+</div>

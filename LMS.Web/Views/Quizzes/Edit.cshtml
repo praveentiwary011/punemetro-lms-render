@@ -1,0 +1,237 @@
+@model Quiz
+@{
+    ViewData["Title"] = "Edit quiz";
+}
+<nav class="small mb-2">
+    <a asp-controller="Instructor" asp-action="ManageCourse" asp-route-id="@Model.CourseId" class="text-decoration-none">@Model.Course?.Title</a>
+    <span class="text-muted">/ Quiz builder</span>
+</nav>
+<h2 class="mb-1">
+    @Model.Title
+    @if (Model.GeneratedByAi) { <span class="badge text-bg-info-subtle text-info-emphasis border border-info-subtle align-middle ms-2"><i class="bi bi-stars me-1"></i>AI-drafted</span> }
+</h2>
+<p class="text-muted mb-4">@Model.Questions.Count question(s) · @Model.TimeLimitMinutes min · @Model.MaxAttempts attempts · pass @Model.PassingScore% · total @Model.Questions.Sum(q => q.Points).ToString("0.#") pts</p>
+@if (Model.GeneratedByAi)
+{
+    <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>These questions were drafted by AI from this course's material. <strong>Review each one</strong> — use <em>Edit</em> to correct wording, options or marks, or <em>Delete</em> to drop it.</div>
+}
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        @if (!Model.Questions.Any())
+        {
+            <div class="card p-4 text-muted">No questions yet — add your first question.</div>
+        }
+        @{ int qi = 0; }
+        @foreach (var q in Model.Questions)
+        {
+            qi++;
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <strong class="flex-grow-1">Q@(qi). @q.Text</strong>
+                        <div class="btn-group btn-group-sm flex-shrink-0" role="group" aria-label="Question actions">
+                            <button class="btn btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#qedit-@q.Id" aria-expanded="false" title="Edit this question">
+                                <i class="bi bi-pencil"></i> Edit
+                            </button>
+                            <button class="btn btn-outline-danger" type="submit" form="qdel-@q.Id" title="Delete this question" data-confirm="Delete this question?">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <form method="post" asp-action="DeleteQuestion" id="qdel-@q.Id" class="d-none">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@q.Id" />
+                    </form>
+                    <div class="small text-muted mb-2">@q.Type · @q.Points.ToString("0.#") pts</div>
+                    @if (q.Type == QuestionType.ShortAnswer)
+                    {
+                        <span class="badge text-bg-light">Answer key: @q.AnswerKey</span>
+                    }
+                    else if (q.Type == QuestionType.Subjective)
+                    {
+                        <div class="small"><span class="badge text-bg-info-subtle text-info-emphasis border border-info-subtle"><i class="bi bi-robot me-1"></i>Auto-graded</span></div>
+                        @if (!string.IsNullOrWhiteSpace(q.RubricText)) { <div class="small text-muted mt-1"><strong>Rubric:</strong> @q.RubricText</div> }
+                        @if (!string.IsNullOrWhiteSpace(q.ReferenceAnswer)) { <div class="small text-muted"><strong>Reference:</strong> @q.ReferenceAnswer</div> }
+                    }
+                    else
+                    {
+                        <ul class="list-unstyled mb-0">
+                            @foreach (var o in q.Options)
+                            {
+                                <li>
+                                    @if (o.IsCorrect) { <i class="bi bi-check-circle-fill text-success me-1"></i> }
+                                    else { <i class="bi bi-circle me-1 text-muted"></i> }
+                                    @o.Text
+                                </li>
+                            }
+                        </ul>
+                    }
+
+                    <div class="collapse mt-3" id="qedit-@q.Id">
+                        <form method="post" asp-action="UpdateQuestion" class="border rounded p-3 bg-light-subtle">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold">Question</label>
+                                <textarea name="text" class="form-control form-control-sm" rows="2" required>@q.Text</textarea>
+                            </div>
+                            @if (q.Type == QuestionType.MultipleChoice)
+                            {
+                                var opts = q.Options.ToList();
+                                var letters = new[] { "A", "B", "C", "D" };
+                                <div class="row g-2 mb-2">
+                                    @for (int i = 0; i < 4; i++)
+                                    {
+                                        <div class="col-md-6">
+                                            <label class="form-label small mb-1">Option @letters[i]</label>
+                                            <input name="option@(letters[i])" class="form-control form-control-sm" value="@(i < opts.Count ? opts[i].Text : "")" />
+                                        </div>
+                                    }
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small mb-1">Correct option</label>
+                                    <select name="correctOption" class="form-select form-select-sm">
+                                        @for (int i = 0; i < 4; i++)
+                                        {
+                                            var sel = i < opts.Count && opts[i].IsCorrect;
+                                            <option value="@letters[i]" selected="@sel">@letters[i]</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+                            else if (q.Type == QuestionType.TrueFalse)
+                            {
+                                var trueIsCorrect = q.Options.Any(o => o.Text == "True" && o.IsCorrect);
+                                <div class="mb-2">
+                                    <label class="form-label small mb-1">Correct answer</label>
+                                    <select name="correctOption" class="form-select form-select-sm">
+                                        <option value="True" selected="@trueIsCorrect">True</option>
+                                        <option value="False" selected="@(!trueIsCorrect)">False</option>
+                                    </select>
+                                </div>
+                            }
+                            else if (q.Type == QuestionType.ShortAnswer)
+                            {
+                                <div class="mb-2">
+                                    <label class="form-label small mb-1">Answer key (case-insensitive)</label>
+                                    <input name="answerKey" class="form-control form-control-sm" value="@q.AnswerKey" />
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mb-2">
+                                    <label class="form-label small mb-1">Marking rubric</label>
+                                    <textarea name="rubricText" class="form-control form-control-sm" rows="3">@q.RubricText</textarea>
+                                    <div class="form-text">Clear, checkable criteria grade most reliably.</div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small mb-1">Reference answer (optional)</label>
+                                    <textarea name="referenceAnswer" class="form-control form-control-sm" rows="2">@q.ReferenceAnswer</textarea>
+                                </div>
+                            }
+                            <div class="d-flex align-items-end gap-2">
+                                <div style="max-width:7rem">
+                                    <label class="form-label small mb-1">Points</label>
+                                    <input name="points" type="number" step="0.5" min="0.5" value="@q.Points.ToString("0.#")" class="form-control form-control-sm" />
+                                </div>
+                                <button class="btn btn-sm btn-primary">Save changes</button>
+                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#qedit-@q.Id">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+    <div class="col-lg-5">
+        <div class="card p-4 mb-3">
+            <h6 class="mb-1"><i class="bi bi-stars me-1"></i>Add more with AI</h6>
+            <p class="text-muted small mb-3">Draft additional questions from this course's material. Questions already in this quiz are never repeated.</p>
+            <form method="post" asp-action="TopUpWithAi" id="topUpForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="quizId" value="@Model.Id" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-5">
+                        <label class="form-label small mb-1">How many</label>
+                        <input name="addCount" type="number" min="1" max="20" value="5" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-7">
+                        <button class="btn btn-primary btn-sm w-100" id="topUpBtn">Generate &amp; add</button>
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="includeWritten" id="topUpWritten" value="true" />
+                    <label class="form-check-label small" for="topUpWritten">Include written (essay) questions</label>
+                </div>
+                <div class="form-text mt-1">Runs on this server — may take a minute.</div>
+            </form>
+        </div>
+        <div class="card p-4">
+            <h6 class="mb-3">Add question</h6>
+            <form method="post" asp-action="AddQuestion">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="quizId" value="@Model.Id" />
+                <div class="mb-2"><textarea name="text" class="form-control" rows="2" placeholder="Question text" required></textarea></div>
+                <div class="row mb-2">
+                    <div class="col-7">
+                        <select name="type" id="qtype" class="form-select">
+                            <option value="0">Multiple choice</option>
+                            <option value="1">True / False</option>
+                            <option value="2">Short answer</option>
+                            <option value="3">Subjective (auto-graded)</option>
+                        </select>
+                    </div>
+                    <div class="col-5"><input name="points" type="number" step="0.5" value="1" class="form-control" title="Points" /></div>
+                </div>
+                <div id="mcq-fields">
+                    <div class="mb-2"><input name="optionA" class="form-control form-control-sm" placeholder="Option A" /></div>
+                    <div class="mb-2"><input name="optionB" class="form-control form-control-sm" placeholder="Option B" /></div>
+                    <div class="mb-2"><input name="optionC" class="form-control form-control-sm" placeholder="Option C (optional)" /></div>
+                    <div class="mb-2"><input name="optionD" class="form-control form-control-sm" placeholder="Option D (optional)" /></div>
+                </div>
+                <div class="mb-2" id="correct-field">
+                    <select name="correctOption" class="form-select form-select-sm">
+                        <option value="A">Correct: A</option><option value="B">Correct: B</option>
+                        <option value="C">Correct: C</option><option value="D">Correct: D</option>
+                        <option value="True">Correct: True</option><option value="False">Correct: False</option>
+                    </select>
+                </div>
+                <div class="mb-3 d-none" id="answerkey-field">
+                    <input name="answerKey" class="form-control form-control-sm" placeholder="Expected answer (case-insensitive)" />
+                </div>
+                <div class="d-none" id="subjective-fields">
+                    <div class="mb-2">
+                        <textarea name="rubricText" class="form-control form-control-sm" rows="3" placeholder="Rubric — the gradeable criteria, e.g. 'mentions the 3 pre-start checks; explains why…'"></textarea>
+                        <div class="form-text">The grader scores the answer against these criteria and passages retrieved from your course material. Clear, checkable criteria grade most reliably.</div>
+                    </div>
+                    <div class="mb-3">
+                        <textarea name="referenceAnswer" class="form-control form-control-sm" rows="2" placeholder="Model / reference answer (optional)"></textarea>
+                    </div>
+                </div>
+                <button class="btn btn-primary w-100">Add question</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script nonce="@Context.CspNonce()">
+    // Top-up can take a while on CPU — show progress and block a double submit.
+    (function () {
+        var f = document.getElementById('topUpForm'), b = document.getElementById('topUpBtn');
+        if (f && b) f.addEventListener('submit', function () {
+            setTimeout(function () { b.disabled = true; b.textContent = 'Generating…'; }, 0);
+        });
+    })();
+
+    document.getElementById('qtype').addEventListener('change', toggleQType);
+    function toggleQType() {
+        const t = document.getElementById('qtype').value;
+        document.getElementById('mcq-fields').classList.toggle('d-none', t !== '0');
+        document.getElementById('correct-field').classList.toggle('d-none', !(t === '0' || t === '1'));
+        document.getElementById('answerkey-field').classList.toggle('d-none', t !== '2');
+        document.getElementById('subjective-fields').classList.toggle('d-none', t !== '3');
+    }
+</script>
+}

@@ -1,0 +1,100 @@
+@model DiscussionThread
+@{
+    ViewData["Title"] = Model.Title;
+    bool isModerator = ViewBag.IsModerator;
+}
+<div class="nk-block-head nk-block-head-sm">
+    <div class="nk-block-between">
+        <div class="nk-block-head-content">
+            <div class="small mb-1">
+                <a asp-action="Index" asp-route-courseId="@Model.CourseId" class="text-decoration-none">
+                    <em class="icon ni ni-arrow-left me-1"></em>@Model.Course?.Title discussions
+                </a>
+            </div>
+            <h3 class="nk-block-title page-title">
+                @if (Model.IsPinned) { <em class="icon ni ni-bookmark-fill text-warning me-1"></em> }
+                @if (Model.IsLocked) { <em class="icon ni ni-lock-fill text-muted me-1"></em> }
+                @Model.Title
+            </h3>
+            <div class="nk-block-des text-soft"><p>Started by @Model.Author?.FullName · @Model.CreatedAt.ToString("MMM d, yyyy HH:mm")</p></div>
+        </div>
+        @if (isModerator)
+        {
+            <div class="nk-block-head-content">
+                <ul class="nk-block-tools g-2">
+                    <li>
+                        <form method="post" asp-action="TogglePin" class="m-0">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <button class="btn btn-sm btn-outline-light">@(Model.IsPinned ? "Unpin" : "Pin")</button>
+                        </form>
+                    </li>
+                    <li>
+                        <form method="post" asp-action="ToggleLock" class="m-0">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <button class="btn btn-sm btn-outline-light">@(Model.IsLocked ? "Unlock" : "Lock")</button>
+                        </form>
+                    </li>
+                    <li>
+                        <form method="post" asp-action="DeleteThread" class="m-0" data-confirm="Delete this thread?">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <button class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="row justify-content-start">
+    <div class="col-xxl-9">
+        <!-- Original post -->
+        <div class="card p-4 mb-4">
+            <div class="d-flex gap-3">
+                <span class="avatar-sm flex-shrink-0">@(string.IsNullOrEmpty(Model.Author?.FullName) ? "?" : Model.Author!.FullName[..1])</span>
+                <div>
+                    <div><strong>@Model.Author?.FullName</strong> <span class="text-muted small ms-1">@Model.CreatedAt.ToString("MMM d, yyyy HH:mm")</span></div>
+                    <div class="mt-1">@Model.Body</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Replies -->
+        <h6 class="text-muted text-uppercase small mb-2 ms-1">@Model.Posts.Count @(Model.Posts.Count == 1 ? "reply" : "replies")</h6>
+        @foreach (var post in Model.Posts)
+        {
+            <div class="card p-3 mb-3 ms-lg-4">
+                <div class="d-flex gap-3">
+                    <span class="avatar-sm flex-shrink-0">@(string.IsNullOrEmpty(post.Author?.FullName) ? "?" : post.Author!.FullName[..1])</span>
+                    <div>
+                        <div><strong>@post.Author?.FullName</strong> <span class="text-muted small ms-1">@post.CreatedAt.ToString("MMM d, HH:mm")</span></div>
+                        <div class="mt-1">@post.Body</div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Reply form -->
+        @if (!Model.IsLocked || isModerator)
+        {
+            <div class="card p-3 ms-lg-4 mt-4">
+                <h6 class="mb-2">Write a reply</h6>
+                <form method="post" asp-action="Reply" class="m-0">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="threadId" value="@Model.Id" />
+                    <textarea name="body" class="form-control mb-3" rows="3" placeholder="Share your answer or follow-up question…" required></textarea>
+                    <div class="d-flex justify-content-end">
+                        <button class="btn btn-primary"><em class="icon ni ni-reply-fill me-1"></em>Post reply</button>
+                    </div>
+                </form>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted ms-lg-4 mt-3"><em class="icon ni ni-lock me-1"></em>This thread is locked.</p>
+        }
+    </div>
+</div>

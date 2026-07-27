@@ -1,0 +1,31 @@
+@model List<Quiz>
+@{
+    ViewData["Title"] = "Self Assessments";
+    var attempts = (Dictionary<int, double[]>)ViewBag.MyAttempts;
+}
+<h2 class="mb-1"><em class="icon ni ni-check-round me-2"></em>Self Assessments</h2>
+<p class="text-muted mb-4">Practice quizzes with unlimited attempts — scores don't affect your grades.</p>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Assessment</th><th>Course</th><th>Questions</th><th>Attempts taken</th><th>Best score</th><th></th></tr></thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="6" class="text-muted">No self assessments available in your courses yet.</td></tr>
+        }
+        @foreach (var q in Model)
+        {
+            var stats = attempts.TryGetValue(q.Id, out var s) ? s : null;
+            <tr>
+                <td class="fw-semibold">@q.Title</td>
+                <td>@q.Course?.Code</td>
+                <td>@q.Questions.Count</td>
+                <td>@(stats != null ? (int)stats[0] : 0)</td>
+                <td>@(stats != null ? $"{stats[1]:0.#}%" : "—")</td>
+                <td class="text-end"><a class="btn btn-sm btn-primary" asp-controller="Quizzes" asp-action="Take" asp-route-id="@q.Id">Practice</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,97 @@
+@model Lesson
+@{
+    ViewData["Title"] = Model.Title;
+    ContentPackage pkg = ViewBag.Package;
+    ApplicationUser user = ViewBag.User;
+    var isCmi5 = pkg.Standard == ContentStandard.Cmi5;
+}
+<div class="nk-block-head nk-block-head-sm">
+    <div class="nk-block-between">
+        <div class="nk-block-head-content">
+            <h3 class="nk-block-title page-title">@Model.Title</h3>
+            <div class="nk-block-des text-soft">
+                <p>
+                    <span class="badge text-bg-info">@(isCmi5 ? "cmi5 / xAPI" : "SCORM 1.2")</span>
+                    Interactive content — your progress is tracked automatically.
+                </p>
+            </div>
+        </div>
+        <div class="nk-block-head-content">
+            <a class="btn btn-sm btn-outline-light" asp-controller="Courses" asp-action="Learn"
+               asp-route-id="@Model.Module?.CourseId" asp-route-lessonId="@Model.Id">Back to course</a>
+        </div>
+    </div>
+</div>
+
+<div class="card p-2">
+    @* Uploaded SCORM/cmi5 content is third-party HTML. It needs same-origin (SCORM 1.2
+       reaches window.parent.API; cmi5 posts to the same-origin /xapi endpoint), so it
+       cannot be fully origin-isolated here — that remains a deployment-level control
+       (serve /scorm from a separate host). The sandbox still withholds top-level
+       navigation, so the content cannot redirect the whole tab to a phishing page. *@
+    <iframe id="scormFrame"
+            src="@(isCmi5 ? (string)ViewBag.Cmi5Url : (string)ViewBag.ContentUrl)"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-popups-to-escape-sandbox"
+            style="width:100%;height:75vh;border:0;border-radius:4px"
+            allowfullscreen></iframe>
+</div>
+
+@section Scripts {
+@if (!isCmi5)
+{
+    <script nonce="@Context.CspNonce()">
+        // ---------------- SCORM 1.2 Runtime API (window.API) ----------------
+        (function () {
+            var cmi = @Html.Raw((string)ViewBag.CmiJson);
+            if (typeof cmi !== 'object' || cmi === null) cmi = {};
+            // LMS-provided elements
+            cmi['cmi.core.student_id'] = '@user.Email';
+            cmi['cmi.core.student_name'] = '@user.FullName';
+            if (!cmi['cmi.core.lesson_status'] || cmi['cmi.core.lesson_status'] === 'not attempted')
+                cmi['cmi.core.lesson_status'] = 'incomplete';
+            cmi['cmi.core.lesson_mode'] = 'normal';
+            cmi['cmi.core.credit'] = 'credit';
+            cmi['cmi.launch_data'] = cmi['cmi.launch_data'] || '';
+
+            var lastError = '0', initialized = false;
+            function persist(async) {
+                var body = JSON.stringify(cmi);
+                if (async === false && navigator.sendBeacon) {
+                    navigator.sendBeacon('/Scorm/Commit?packageId=@pkg.Id&lessonId=@Model.Id',
+                        new Blob([body], { type: 'application/json' }));
+                    return;
+                }
+                fetch('/Scorm/Commit?packageId=@pkg.Id&lessonId=@Model.Id', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+            }
+
+            window.API = {
+                LMSInitialize: function () { initialized = true; lastError = '0'; return 'true'; },
+                LMSFinish: function () {
+                    if (!initialized) { lastError = '301'; return 'false'; }
+                    initialized = false; persist(false); return 'true';
+                },
+                LMSGetValue: function (key) {
+                    lastError = '0';
+                    if (key === 'cmi.core._children')
+                        return 'student_id,student_name,lesson_location,credit,lesson_status,entry,score,total_time,lesson_mode,exit,session_time';
+                    return (key in cmi) ? String(cmi[key]) : '';
+                },
+                LMSSetValue: function (key, value) {
+                    lastError = '0';
+                    cmi[key] = String(value);
+                    return 'true';
+                },
+                LMSCommit: function () { persist(true); lastError = '0'; return 'true'; },
+                LMSGetLastError: function () { return lastError; },
+                LMSGetErrorString: function (code) { return code === '0' ? 'No error' : 'Error ' + code; },
+                LMSGetDiagnostic: function (code) { return 'Diagnostic for ' + (code || lastError); }
+            };
+            window.addEventListener('beforeunload', function () { if (initialized) persist(false); });
+        })();
+    </script>
+}
+}

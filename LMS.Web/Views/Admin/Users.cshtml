@@ -1,0 +1,289 @@
+@model List<(ApplicationUser User, IList<string> Roles)>
+@{
+    ViewData["Title"] = "Users";
+    var organisations = (List<Organisation>)ViewBag.Organisations;
+    var customRoles = (List<string>)ViewBag.CustomRoles;
+    var createRoles = (List<string>)ViewBag.CreateRoles;
+    var orgRoleNames = (Dictionary<int, HashSet<string>>)ViewBag.OrgRoleNames;
+    var builtInRoles = new HashSet<string> { "Student", "Instructor", "Principal", "Admin", "SuperUser" };
+    var isSuper = User.IsInRole("SuperUser");
+    // Admins work with each organisation's own (company) roles; the built-in platform
+    // role each maps to (Trainee/Trainer/Principal/Admin) is a fallback for organisations
+    // with no custom roles (e.g. the platform owner).
+    var platformFallback = new (string Value, string Label)[]
+        { ("Student", "Trainee"), ("Instructor", "Trainer"), ("Principal", "Principal"), ("Admin", "Admin") };
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-people me-2"></i>Users</h2>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createUserModal">
+        <i class="bi bi-person-plus me-1"></i>New user
+    </button>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-auto"><input name="q" value="@ViewBag.Query" class="form-control" placeholder="Search name or email" /></div>
+    <div class="col-auto">
+        <select name="role" class="form-select">
+            <option value="">All roles</option>
+            @foreach (var r in (isSuper ? customRoles.Append("SuperUser") : customRoles))
+            {
+                if (ViewBag.Role == r) { <option selected value="@r">@r</option> }
+                else { <option value="@r">@r</option> }
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <select name="organisationId" class="form-select">
+            <option value="">All organisations</option>
+            @foreach (var o in organisations)
+            {
+                if ((int?)ViewBag.OrganisationId == o.Id) { <option selected value="@o.Id">@o.Name</option> }
+                else { <option value="@o.Id">@o.Name</option> }
+            }
+        </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-outline-primary">Filter</button></div>
+</form>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Name</th><th>Email</th><th>Organisation</th><th>Department</th><th>Role</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+        <tbody>
+        @foreach (var (user, roles) in Model)
+        {
+            <tr>
+                <td>
+                    <span class="avatar-sm me-2">@(string.IsNullOrEmpty(user.FullName) ? "?" : user.FullName[..1])</span>@user.FullName
+                    @if (organisations.FirstOrDefault(o => o.Id == user.OrganisationId)?.CertificateSignatoryId == user.Id)
+                    {
+                        <span class="badge text-bg-primary ms-1" title="Signs this organisation's certificates (Training Director)"><i class="bi bi-pen"></i> Signatory</span>
+                    }
+                </td>
+                <td>@user.Email</td>
+                <td class="small">
+                    @if (user.Organisation != null) { <span class="badge text-bg-light border">@user.Organisation.Code</span> }
+                    else { <span class="text-muted">—</span> }
+                </td>
+                <td class="small">@user.Department</td>
+                <td>
+                    @{
+                        // Show the user's organisation-specific role(s); the built-in
+                        // platform role each maps to is suppressed (e.g. "Student, Trainee"
+                        // → just the company role). Users with no organisation role fall
+                        // back to the built-in role label.
+                        var orgSet = user.OrganisationId != null && orgRoleNames.TryGetValue(user.OrganisationId.Value, out var s) ? s : new HashSet<string>();
+                        var companyRoles = roles.Where(r => orgSet.Contains(r)).OrderBy(r => r).ToList();
+                        var shownRoles = companyRoles.Any()
+                            ? companyRoles
+                            : roles.Where(r => builtInRoles.Contains(r)).Select(r => ActiveRole.Label(r)).Distinct().ToList();
+                    }
+                    <span class="badge text-bg-secondary">@string.Join(", ", shownRoles)</span>
+                </td>
+                <td>
+                    @if (user.IsActive) { <span class="badge text-bg-success">Active</span> }
+                    else { <span class="badge text-bg-danger">Deactivated</span> }
+                </td>
+                <td class="text-end">
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside">Manage</button>
+                        <ul class="dropdown-menu dropdown-menu-end p-3 user-manage-menu">
+                            <li class="mb-3">
+                                <form method="post" asp-action="SetUserRoles">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@user.Id" />
+                                    <div class="manage-section-title">Roles</div>
+                                    @{
+                                        var userOrgRoles = user.OrganisationId != null && orgRoleNames.TryGetValue(user.OrganisationId.Value, out var uset)
+                                            ? uset.OrderBy(x => x).ToList() : new List<string>();
+                                    }
+                                    @if (userOrgRoles.Any())
+                                    {
+                                        foreach (var r in userOrgRoles)
+                                        {
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="roles" value="@r"
+                                                       id="role-@user.Id-@r.Replace(" ", "-")" checked="@(roles.Contains(r))" />
+                                                <label class="form-check-label" for="role-@user.Id-@r.Replace(" ", "-")">@r</label>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @* Organisations with no custom roles (e.g. the platform owner) fall back to the built-in roles. *@
+                                        foreach (var (val, label) in platformFallback)
+                                        {
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="roles" value="@val"
+                                                       id="role-@user.Id-@val" checked="@(roles.Contains(val))" />
+                                                <label class="form-check-label" for="role-@user.Id-@val">@label</label>
+                                            </div>
+                                        }
+                                    }
+                                    @if (isSuper)
+                                    {
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="roles" value="SuperUser"
+                                                   id="role-@user.Id-SuperUser" checked="@(roles.Contains("SuperUser"))" />
+                                            <label class="form-check-label" for="role-@user.Id-SuperUser">Super User</label>
+                                        </div>
+                                    }
+                                    <button class="btn btn-sm btn-outline-primary w-100 mt-2"
+                                            title="Set the user's roles to exactly the checked boxes">Apply roles</button>
+                                </form>
+                            </li>
+                            @if (User.IsInRole("SuperUser"))
+                            {
+                                <li class="mb-3">
+                                    <form method="post" asp-action="SetUserOrganisation">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@user.Id" />
+                                        <div class="manage-section-title">Organisation</div>
+                                        <div class="manage-inline-row">
+                                            <select name="organisationId" class="form-select form-select-sm">
+                                                <option value="">— None (platform) —</option>
+                                                @foreach (var o in organisations)
+                                                {
+                                                    if (user.OrganisationId == o.Id) { <option selected value="@o.Id">@o.Name</option> }
+                                                    else { <option value="@o.Id">@o.Name</option> }
+                                                }
+                                            </select>
+                                            <button class="btn btn-sm btn-outline-primary">Set</button>
+                                        </div>
+                                    </form>
+                                </li>
+                            }
+                            <li class="mb-3">
+                                <form method="post" asp-action="UploadUserSignature" enctype="multipart/form-data">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@user.Id" />
+                                    <div class="manage-section-title">Certificate signature</div>
+                                    @if (user.SignatureUrl != null)
+                                    {
+                                        <img src="@user.SignatureUrl" alt="Signature — @user.FullName" class="manage-sign-preview" />
+                                    }
+                                    else
+                                    {
+                                        <div class="small text-muted">No signature uploaded — placeholder in use.</div>
+                                    }
+                                    <input name="signature" type="file" accept=".png,.jpg,.jpeg,.webp" class="form-control form-control-sm" required />
+                                    <button class="btn btn-sm btn-outline-primary">Upload signature</button>
+                                </form>
+                                @if (user.OrganisationId != null)
+                                {
+                                    var isSignatory = organisations.FirstOrDefault(o => o.Id == user.OrganisationId)?.CertificateSignatoryId == user.Id;
+                                    if (isSignatory || user.SignatureUrl != null)
+                                    {
+                                        <form method="post" asp-action="SetCertificateSignatory" class="mt-2">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@user.Id" />
+                                            <button class="btn btn-sm w-100 @(isSignatory ? "btn-outline-danger" : "btn-outline-primary")"
+                                                    title="The signatory's name and signature appear in the certificate's Training Director slot">
+                                                @(isSignatory ? "Remove as certificate signatory" : "Set as certificate signatory")
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm w-100 btn-outline-secondary mt-2" disabled
+                                                title="A signature image must be uploaded before this user can be selected as certificate signatory">
+                                            Set as certificate signatory
+                                        </button>
+                                    }
+                                }
+                            </li>
+                            <li class="mb-3">
+                                <form method="post" asp-action="ResetPassword">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@user.Id" />
+                                    <div class="manage-section-title">Password</div>
+                                    <div class="manage-inline-row">
+                                        <input name="newPassword" class="form-control form-control-sm" placeholder="New password" required />
+                                        <button class="btn btn-sm btn-outline-warning">Reset</button>
+                                    </div>
+                                </form>
+                            </li>
+                            <li>
+                                <form method="post" asp-action="ToggleUserActive">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@user.Id" />
+                                    <button class="btn btn-sm w-100 @(user.IsActive ? "btn-outline-danger" : "btn-outline-success")">
+                                        @(user.IsActive ? "Deactivate" : "Reactivate")
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<div class="modal fade" id="createUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-action="CreateUser">
+                @Html.AntiForgeryToken()
+                <div class="modal-header"><h5 class="modal-title">Create user</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Full name</label><input name="fullName" class="form-control" required /></div>
+                    <div class="mb-3"><label class="form-label">Email</label><input name="email" type="email" class="form-control" required /></div>
+                    <div class="mb-3"><label class="form-label">Password</label><input name="password" class="form-control" required /></div>
+                    @if (User.IsInRole("SuperUser"))
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Organisation</label>
+                            <select name="organisationId" class="form-select">
+                                <option value="">— None (platform) —</option>
+                                @foreach (var o in organisations)
+                                {
+                                    <option value="@o.Id">@o.Name</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="mb-3 text-muted small">The user will be created in your organisation.</div>
+                    }
+                    <div class="mb-3">
+                        <label class="form-label d-block">Roles <span class="text-muted small">(select one or more)</span></label>
+                        @if (createRoles.Any())
+                        {
+                            foreach (var r in createRoles)
+                            {
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" name="roles" value="@r" id="new-role-@r.Replace(" ", "-")" />
+                                    <label class="form-check-label" for="new-role-@r.Replace(" ", "-")">@r</label>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            foreach (var (val, label) in platformFallback)
+                            {
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" name="roles" value="@val" id="new-role-@val" checked="@(val == "Student")" />
+                                    <label class="form-check-label" for="new-role-@val">@label</label>
+                                </div>
+                            }
+                        }
+                        @if (isSuper)
+                        {
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="roles" value="SuperUser" id="new-role-SuperUser" />
+                                <label class="form-check-label" for="new-role-SuperUser">Super User</label>
+                            </div>
+                        }
+                        <div class="form-text">Roles are your organisation's own; each maps to a built-in LMS role (Trainee, Trainer, Principal or Admin).</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

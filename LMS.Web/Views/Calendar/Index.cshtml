@@ -1,0 +1,168 @@
+@model List<CalendarEvent>
+@{
+    ViewData["Title"] = "Calendar";
+    int year = ViewBag.Year, month = ViewBag.Month;
+    var monthName = new DateTime(year, month, 1).ToString("MMMM yyyy");
+    var prev = new DateTime(year, month, 1).AddMonths(-1);
+    var next = new DateTime(year, month, 1).AddMonths(1);
+
+    var daysInMonth = DateTime.DaysInMonth(year, month);
+    var startDow = (int)new DateTime(year, month, 1).DayOfWeek; // 0 = Sunday
+    var totalCells = (int)Math.Ceiling((startDow + daysInMonth) / 7.0) * 7;
+    var eventsByDay = Model.GroupBy(e => e.Start.Day).ToDictionary(g => g.Key, g => g.OrderBy(e => e.Start).ToList());
+    var today = DateTime.UtcNow;
+
+    string BadgeClass(EventType t) => t switch
+    {
+        EventType.Assignment => "text-bg-warning",
+        EventType.Quiz => "text-bg-info",
+        EventType.Personal => "text-bg-secondary",
+        _ => "text-bg-primary"
+    };
+}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><i class="bi bi-calendar3 me-2"></i>@monthName</h2>
+    <div class="d-flex gap-2 flex-wrap">
+        <div class="btn-group" role="group" aria-label="View mode">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btnCalView"><i class="bi bi-calendar3-week me-1"></i>Calendar</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btnListView"><i class="bi bi-list-ul me-1"></i>List</button>
+        </div>
+        <a class="btn btn-outline-primary btn-sm" asp-action="Index" asp-route-year="@prev.Year" asp-route-month="@prev.Month">← @prev.ToString("MMM")</a>
+        <a class="btn btn-outline-primary btn-sm" asp-action="Index" asp-route-year="@next.Year" asp-route-month="@next.Month">@next.ToString("MMM") →</a>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#newEventModal"><i class="bi bi-plus-lg me-1"></i>Personal event</button>
+    </div>
+</div>
+
+@* ---------- Calendar (month grid) view ---------- *@
+<div id="calView" class="card p-3" style="display:none">
+    <div class="table-responsive">
+        <table class="table table-bordered mb-0 cal-grid">
+            <thead>
+                <tr>
+                    @foreach (var d in new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" })
+                    {
+                        <th class="text-center text-muted small fw-semibold">@d</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @for (var row = 0; row < totalCells / 7; row++)
+                {
+                    <tr>
+                        @for (var col = 0; col < 7; col++)
+                        {
+                            var cell = row * 7 + col;
+                            var day = cell - startDow + 1;
+                            if (day < 1 || day > daysInMonth)
+                            {
+                                <td class="cal-cell cal-empty"></td>
+                            }
+                            else
+                            {
+                                var isToday = today.Year == year && today.Month == month && today.Day == day;
+                                var dayEvents = eventsByDay.TryGetValue(day, out var list) ? list : new List<CalendarEvent>();
+                                <td class="cal-cell @(isToday ? "cal-today" : "")">
+                                    <div class="cal-daynum @(isToday ? "badge text-bg-primary rounded-pill" : "text-muted")">@day</div>
+                                    @foreach (var e in dayEvents.Take(3))
+                                    {
+                                        <div class="cal-event badge @BadgeClass(e.Type)"
+                                             title="@e.Start.ToString("HH:mm") · @e.Title@(e.Course != null ? $" · {e.Course.Code}" : "") (@e.Type)">
+                                            @e.Title
+                                        </div>
+                                    }
+                                    @if (dayEvents.Count > 3)
+                                    {
+                                        <div class="cal-more text-muted small"
+                                             title="@string.Join("\n", dayEvents.Skip(3).Select(e => $"{e.Start:HH:mm} · {e.Title}"))">
+                                            +@(dayEvents.Count - 3) more
+                                        </div>
+                                    }
+                                </td>
+                            }
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="d-flex gap-3 flex-wrap mt-3 small text-muted">
+        <span><span class="badge text-bg-primary">&nbsp;</span> Course / Session</span>
+        <span><span class="badge text-bg-warning">&nbsp;</span> Assignment</span>
+        <span><span class="badge text-bg-info">&nbsp;</span> Quiz</span>
+        <span><span class="badge text-bg-secondary">&nbsp;</span> Personal</span>
+    </div>
+</div>
+
+@* ---------- List view ---------- *@
+<div id="listView" class="card" style="max-width:800px; display:none">
+    <ul class="list-group list-group-flush">
+        @if (!Model.Any())
+        {
+            <li class="list-group-item text-muted">No events this month.</li>
+        }
+        @foreach (var e in Model)
+        {
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="badge me-2 @BadgeClass(e.Type)">@e.Type</span>
+                    @e.Title
+                    @if (e.Course != null) { <span class="text-muted small">· @e.Course.Code</span> }
+                </div>
+                <span class="text-muted small text-nowrap">@e.Start.ToString("ddd, MMM d · HH:mm")</span>
+            </li>
+        }
+    </ul>
+</div>
+
+<div class="modal fade" id="newEventModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-action="Create">
+                @Html.AntiForgeryToken()
+                <div class="modal-header"><h5 class="modal-title">New personal event</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><input name="title" class="form-control" placeholder="Title" required /></div>
+                    <div class="mb-3"><input name="start" type="datetime-local" class="form-control" required /></div>
+                    <input type="hidden" name="type" value="3" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-primary">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<style>
+    .cal-grid { table-layout: fixed; min-width: 700px; }
+    .cal-cell { height: 96px; vertical-align: top; padding: 4px 6px; }
+    .cal-empty { background: #f5f6fa; }
+    .cal-today { background: rgba(101, 118, 255, .06); }
+    .cal-daynum { font-size: .75rem; margin-bottom: 2px; }
+    .cal-event {
+        display: block; width: 100%; text-align: start; font-weight: 500;
+        margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default;
+    }
+    .cal-more { cursor: default; }
+</style>
+<script nonce="@Context.CspNonce()">
+    (function () {
+        var cal = document.getElementById('calView'), list = document.getElementById('listView');
+        var btnCal = document.getElementById('btnCalView'), btnList = document.getElementById('btnListView');
+        function show(mode) {
+            cal.style.display = mode === 'list' ? 'none' : '';
+            list.style.display = mode === 'list' ? '' : 'none';
+            btnCal.classList.toggle('active', mode !== 'list');
+            btnList.classList.toggle('active', mode === 'list');
+            try { localStorage.setItem('lms-calendar-view', mode); } catch (e) { }
+        }
+        var saved = 'calendar';
+        try { saved = localStorage.getItem('lms-calendar-view') || 'calendar'; } catch (e) { }
+        show(saved);
+        btnCal.addEventListener('click', function () { show('calendar'); });
+        btnList.addEventListener('click', function () { show('list'); });
+    })();
+</script>
+}

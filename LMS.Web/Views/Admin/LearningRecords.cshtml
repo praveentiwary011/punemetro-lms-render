@@ -1,0 +1,55 @@
+@model List<XapiStatementRecord>
+@{
+    ViewData["Title"] = "Learning Records (xAPI)";
+    int page = ViewBag.Page;
+}
+<div class="nk-block-head nk-block-head-sm">
+    <div class="nk-block-between">
+        <div class="nk-block-head-content">
+            <h3 class="nk-block-title page-title">Learning Records (xAPI)</h3>
+            <div class="nk-block-des text-soft">
+                <p>@ViewBag.Total statements in the LRS — from native LMS activity and SCORM 1.2 / cmi5 content. Standards: SCORM 1.2, xAPI 1.0.3, cmi5.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Stored (UTC)</th><th>Actor</th><th>Verb</th><th>Activity</th><th class="text-end"></th></tr></thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="5" class="text-muted">No statements recorded yet.</td></tr>
+        }
+        @foreach (var s in Model)
+        {
+            var verbShort = s.Verb.Contains('/') ? s.Verb[(s.Verb.LastIndexOf('/') + 1)..] : s.Verb;
+            <tr>
+                <td class="text-nowrap small">@s.Stored.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                <td>@s.ActorName <div class="small text-muted">@s.ActorAccount</div></td>
+                <td>
+                    <span class="badge @(verbShort is "passed" or "completed" ? "text-bg-success" : verbShort == "failed" ? "text-bg-danger" : "text-bg-info")">@verbShort</span>
+                </td>
+                <td class="small text-muted" style="max-width:340px"><div class="text-truncate">@s.ActivityId</div></td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-light" data-bs-toggle="collapse" data-bs-target="#st-@s.Id.Replace("-","")">JSON</button>
+                </td>
+            </tr>
+            <tr class="collapse" id="st-@s.Id.Replace("-","")">
+                <td colspan="5"><pre class="small bg-light p-2 mb-0" style="white-space:pre-wrap">@s.StatementJson</pre></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+<div class="d-flex gap-2 mt-3">
+    @if (page > 1)
+    {
+        <a class="btn btn-outline-primary btn-sm" asp-action="LearningRecords" asp-route-page="@(page - 1)">← Newer</a>
+    }
+    @if (ViewBag.HasMore == true)
+    {
+        <a class="btn btn-outline-primary btn-sm" asp-action="LearningRecords" asp-route-page="@(page + 1)">Older →</a>
+    }
+</div>

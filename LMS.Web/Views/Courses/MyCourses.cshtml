@@ -1,0 +1,65 @@
+@model List<Enrollment>
+@{
+    string status = ViewBag.Status;
+    ViewData["Title"] = status == "completed" ? "Completed Courses" : "Ongoing Courses";
+    var completedIds = (List<int>)ViewBag.CompletedLessonIds;
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><em class="icon ni ni-book-read me-2"></em>@ViewData["Title"]</h2>
+    <div class="d-flex gap-2">
+        <a class="btn btn-sm @(status != "completed" ? "btn-primary" : "btn-outline-primary")" asp-action="MyCourses" asp-route-status="ongoing">Ongoing</a>
+        <a class="btn btn-sm @(status == "completed" ? "btn-primary" : "btn-outline-primary")" asp-action="MyCourses" asp-route-status="completed">Completed</a>
+    </div>
+</div>
+
+<div class="row g-4">
+    @if (!Model.Any())
+    {
+        <p class="text-muted">No @(status == "completed" ? "completed" : "ongoing") courses.</p>
+    }
+    @foreach (var e in Model)
+    {
+        var lessons = e.Course!.Modules.SelectMany(m => m.Lessons).ToList();
+        var done = lessons.Count(l => completedIds.Contains(l.Id));
+        var lessonsPct = lessons.Count == 0 ? 0 : (int)((double)done / lessons.Count * 100);
+        // Content finished but a required assessment is still outstanding: cap the shown
+        // progress at 95% and flag it as pending (a passed assessment would have moved the
+        // course to Completed, so an Active course at 100% lessons is awaiting the assessment).
+        var assessmentPending = e.Status == EnrollmentStatus.Active && e.Course.RequiresAssessment
+                                && lessons.Count > 0 && done == lessons.Count;
+        var pct = assessmentPending ? 95 : lessonsPct;
+        var gradedQuiz = e.Course.Quizzes.FirstOrDefault(q => q.IsPublished && !q.IsSelfAssessment);
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="course-thumb"><em class="icon ni ni-book"></em></div>
+                <div class="card-body">
+                    <span class="badge text-bg-light mb-1">@e.Course.Code</span>
+                    @if (e.Status == EnrollmentStatus.Completed) { <span class="badge text-bg-success mb-1">Completed @(e.FinalGrade != null ? $"· {e.FinalGrade:0.#}%" : "")</span> }
+                    else if (assessmentPending) { <span class="badge text-bg-warning mb-1"><em class="icon ni ni-clock me-1"></em>Assessment Pending</span> }
+                    <h5>@e.Course.Title</h5>
+                    <div class="small text-muted mb-1">@e.Course.Instructor?.FullName</div>
+                    <div class="d-flex justify-content-between small text-muted mb-1"><span>@done of @lessons.Count lessons</span><span>@pct%</span></div>
+                    <div class="progress mb-3"><div class="progress-bar @(assessmentPending ? "bg-warning" : "")" style="width:@(pct)%"></div></div>
+                    @if (assessmentPending)
+                    {
+                        <p class="small text-warning mb-2"><em class="icon ni ni-alert-circle me-1"></em>Finish the assessment to complete this course.</p>
+                        @if (gradedQuiz != null)
+                        {
+                            <a class="btn btn-sm btn-warning" asp-controller="Quizzes" asp-action="Take" asp-route-id="@gradedQuiz.Id">Take assessment</a>
+                        }
+                        else
+                        {
+                            <a class="btn btn-sm btn-warning" asp-action="Details" asp-route-id="@e.CourseId" asp-fragment="assessments">Take assessment</a>
+                        }
+                        <a class="btn btn-sm btn-outline-secondary" asp-action="Learn" asp-route-id="@e.CourseId">Review lessons</a>
+                    }
+                    else
+                    {
+                        <a class="btn btn-sm btn-primary" asp-action="Learn" asp-route-id="@e.CourseId">@(status == "completed" ? "Review" : "Continue")</a>
+                        <a class="btn btn-sm btn-outline-secondary" asp-action="Details" asp-route-id="@e.CourseId">Overview</a>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>

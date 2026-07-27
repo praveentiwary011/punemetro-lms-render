@@ -1,0 +1,44 @@
+@using LMS.Web.Services.Setup
+@model SetupWizardState
+@{
+    Layout = "_Wizard";
+    ViewData["Title"] = "Administrator";
+}
+<h1>Create the administrator</h1>
+<p class="sub">The first account, with full control of <strong>@(string.IsNullOrWhiteSpace(Model.OrgName) ? "your organisation" : Model.OrgName)</strong> — users, courses, assessments and settings. You can add more people once you're in.</p>
+
+<form method="post" asp-action="SaveAdministrator">
+    @Html.AntiForgeryToken()
+    <div class="row">
+        <div class="fld full">
+            <label class="lbl">Full name *</label>
+            <input type="text" name="adminName" value="@Model.AdminName" required placeholder="e.g. Anil Deshmukh" />
+        </div>
+        <div class="fld full">
+            <label class="lbl">Email (used to sign in) *</label>
+            <input type="email" name="adminEmail" value="@Model.AdminEmail" required placeholder="admin@yourcompany.com" />
+        </div>
+        <div class="fld">
+            <label class="lbl">Password *</label>
+            <input type="password" name="password" required minlength="8" autocomplete="new-password" />
+            <div class="hint">At least 8 characters.</div>
+        </div>
+        <div class="fld">
+            <label class="lbl">Confirm password *</label>
+            <input type="password" name="confirmPassword" required minlength="8" autocomplete="new-password" />
+        </div>
+    </div>
+
+    <label class="chk">
+        <input type="checkbox" name="superUser" value="true" @(Model.AdminIsSuperUser ? "checked" : "") />
+        <span>
+            <strong>Also grant platform administration (Super User)</strong>
+            <div class="hint">Tick this if the same person will manage <em>multiple</em> organisations on this installation. For a single-company install you can leave it off.</div>
+        </span>
+    </label>
+
+    <div class="actions">
+        <a class="back" asp-action="Organisation">← Back</a>
+        <button type="submit" class="btn btn-primary">Continue</button>
+    </div>
+</form>

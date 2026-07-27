@@ -1,0 +1,112 @@
+@model Quiz
+@{
+    ViewData["Title"] = "Quiz results";
+    var attempts = (List<QuizAttempt>)ViewBag.Attempts;
+    var subjPending = ViewBag.SubjPending as HashSet<int> ?? new HashSet<int>();
+    var subjReview = ViewBag.SubjReview as HashSet<int> ?? new HashSet<int>();
+    var subjFeedback = ViewBag.SubjFeedback as Dictionary<int, string> ?? new Dictionary<int, string>();
+    var latestAttempt = attempts.FirstOrDefault();
+    var latestPending = latestAttempt != null &&
+        latestAttempt.Answers.Any(a => subjPending.Contains(a.Id) || subjReview.Contains(a.Id));
+}
+<nav class="small mb-2">
+    <a asp-controller="Courses" asp-action="Details" asp-route-id="@Model.CourseId" class="text-decoration-none">@Model.Course?.Title</a>
+    <span class="text-muted">/ Quiz results</span>
+</nav>
+<h2 class="mb-4">@Model.Title — your results</h2>
+
+@if (!attempts.Any())
+{
+    <div class="card p-4">
+        <p class="text-muted mb-3">You haven't attempted this quiz yet.</p>
+        <a class="btn btn-primary" asp-action="Take" asp-route-id="@Model.Id" style="max-width:200px">Start quiz</a>
+    </div>
+}
+else
+{
+    var canRetry = attempts.Count < Model.MaxAttempts;
+    <div class="row g-4">
+        <div class="col-lg-5">
+            @foreach (var attempt in attempts)
+            {
+                var pct = attempt.MaxScore > 0 ? attempt.Score / attempt.MaxScore * 100 : 0;
+                <div class="card p-4 mb-3">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <strong>Attempt @attempt.AttemptNumber</strong>
+                            <div class="small text-muted">@attempt.SubmittedAt?.ToString("MMM d, yyyy HH:mm") UTC</div>
+                        </div>
+                        <div class="text-end">
+                            <span class="fs-4 fw-bold @(pct >= Model.PassingScore ? "text-success" : "text-danger")">@pct.ToString("0.#")%</span>
+                            <div class="small text-muted">@attempt.Score.ToString("0.#") / @attempt.MaxScore.ToString("0.#") pts</div>
+                        </div>
+                    </div>
+                    @if (attempt == latestAttempt && latestPending)
+                    {
+                        <span class="badge mt-2 text-bg-warning" style="width:fit-content"><i class="bi bi-hourglass-split me-1"></i>Assessment Pending</span>
+                        <div class="small text-muted mt-1">Your written answers are being graded@(subjReview.Overlaps(attempt.Answers.Select(a => a.Id)) ? " / awaiting trainer review" : "").</div>
+                    }
+                    else
+                    {
+                        <span class="badge mt-2 @(pct >= Model.PassingScore ? "text-bg-success" : "text-bg-danger")" style="width:fit-content">
+                            @(pct >= Model.PassingScore ? "Passed" : "Not passed")
+                        </span>
+                    }
+                </div>
+            }
+            @if (canRetry)
+            {
+                <a class="btn btn-primary" asp-action="Take" asp-route-id="@Model.Id">Try again (@(Model.MaxAttempts - attempts.Count) attempt(s) left)</a>
+            }
+        </div>
+        <div class="col-lg-7">
+            <div class="card p-4">
+                <h6 class="mb-3">Answer review (latest attempt)</h6>
+                @{
+                    var latest = attempts.First();
+                    int qi = 0;
+                }
+                @foreach (var q in Model.Questions)
+                {
+                    qi++;
+                    var ans = latest.Answers.FirstOrDefault(a => a.QuestionId == q.Id);
+                    var isPending = ans != null && (subjPending.Contains(ans.Id) || subjReview.Contains(ans.Id));
+                    var correct = ans != null && !isPending && ans.PointsAwarded >= q.Points;
+                    <div class="mb-3 pb-3 border-bottom">
+                        <div>
+                            @if (isPending) { <i class="bi bi-hourglass-split text-warning me-1"></i> }
+                            else if (correct) { <i class="bi bi-check-circle-fill text-success me-1"></i> }
+                            else if (q.Type == QuestionType.Subjective && ans != null && ans.PointsAwarded > 0) { <i class="bi bi-check-circle text-warning me-1"></i> }
+                            else { <i class="bi bi-x-circle-fill text-danger me-1"></i> }
+                            <strong>Q@(qi).</strong> @q.Text
+                        </div>
+                        @if (q.Type == QuestionType.Subjective)
+                        {
+                            <div class="small text-muted mt-1">Your answer: @(string.IsNullOrWhiteSpace(ans?.TextAnswer) ? "—" : ans!.TextAnswer)</div>
+                            @if (isPending)
+                            {
+                                <div class="small text-warning mt-1"><i class="bi bi-robot me-1"></i>@(subjReview.Contains(ans!.Id) ? "Graded — awaiting trainer review." : "Being graded automatically…")</div>
+                            }
+                            else
+                            {
+                                <div class="small mt-1">
+                                    <span class="badge text-bg-light border">@((ans?.PointsAwarded ?? 0).ToString("0.#"))/@q.Points.ToString("0.#") pts</span>
+                                    @if (ans != null && subjFeedback.TryGetValue(ans.Id, out var fb)) { <span class="text-muted ms-1">@fb</span> }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="small text-muted mt-1">
+                                Your answer:
+                                @if (q.Type == QuestionType.ShortAnswer) { @(ans?.TextAnswer ?? "—") }
+                                else { @(q.Options.FirstOrDefault(o => o.Id == ans?.SelectedOptionId)?.Text ?? "—") }
+                                · @((ans?.PointsAwarded ?? 0).ToString("0.#"))/@q.Points.ToString("0.#") pts
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}

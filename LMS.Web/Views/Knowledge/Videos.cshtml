@@ -1,0 +1,221 @@
+@model List<VideoItem>
+@inject MediaTokenService MediaTokens
+@{
+    ViewData["Title"] = "Videos & Tutorials";
+    bool canManage = ViewBag.CanManage;
+
+    // Extract a YouTube video id from embed / watch / youtu.be URLs so we can show a
+    // lightweight thumbnail facade instead of loading a full player per card.
+    static string? YouTubeId(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return null;
+        // Handles embed/, shorts/, v/, youtu.be/ and watch URLs where v= is any query param.
+        var m = System.Text.RegularExpressions.Regex.Match(url,
+            @"(?:youtube(?:-nocookie)?\.com/(?:embed/|shorts/|v/)|youtu\.be/)([A-Za-z0-9_-]{6,})|[?&]v=([A-Za-z0-9_-]{6,})");
+        if (!m.Success) return null;
+        return m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
+    }
+
+    // A locally uploaded (or directly linked) video file we can stream in an HTML5 player.
+    static bool IsFileVideo(string url) =>
+        !string.IsNullOrEmpty(url) &&
+        new[] { ".mp4", ".webm", ".mov", ".ogv", ".ogg" }
+            .Any(ext => url.Split('?')[0].EndsWith(ext, StringComparison.OrdinalIgnoreCase));
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><em class="icon ni ni-video-fill me-2"></em>Videos &amp; Tutorials</h2>
+    @if (canManage)
+    {
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newVideoModal"><em class="icon ni ni-plus me-1"></em>Add video</button>
+    }
+</div>
+
+<form method="get" class="d-flex gap-2 mb-4" style="max-width:420px">
+    <input name="q" value="@ViewBag.Query" class="form-control form-control-sm" placeholder="Search videos by title or topic…" />
+    <button class="btn btn-sm btn-outline-primary">Search</button>
+    @if (!string.IsNullOrEmpty((string?)ViewBag.Query))
+    {
+        <a class="btn btn-sm btn-outline-light" asp-action="Videos">Clear</a>
+    }
+</form>
+
+<div class="row g-4">
+    @if (!Model.Any())
+    {
+        <p class="text-muted">No videos match your search.</p>
+    }
+    @foreach (var v in Model)
+    {
+        var ytId = YouTubeId(v.Url);
+        var hosted = v.Url.StartsWith("/uploads/", StringComparison.Ordinal);   // our uploaded file
+        var fileVideo = ytId == null && (hosted || IsFileVideo(v.Url));
+        // Hosted files stream through the gated MediaController with a short-lived,
+        // user-bound access token (blocks direct download, link sharing and hotlinking);
+        // external direct links are played as-is (not ours to protect).
+        var vidTok = hosted ? MediaTokens.Issue(User.GetUserId(), MediaTokenService.VideoKind, v.Id, TimeSpan.FromHours(8)) : null;
+        var videoSrc = hosted ? Url.Action("Video", "Media", new { id = v.Id, t = vidTok }) : v.Url;
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                @if (ytId != null)
+                {
+                    <div class="ratio ratio-16x9">
+                        <div class="yt-facade" role="button" tabindex="0"
+                             data-embed="https://www.youtube.com/embed/@ytId?autoplay=1&rel=0&enablejsapi=1"
+                             data-title="@v.Title"
+                             style="background-image:url('https://i.ytimg.com/vi/@ytId/hqdefault.jpg')">
+                            <span class="yt-play" aria-hidden="true"><em class="icon ni ni-play-circle-fill"></em></span>
+                        </div>
+                    </div>
+                }
+                else if (fileVideo)
+                {
+                    <div class="ratio ratio-16x9">
+                        <video controls controlslist="nodownload noplaybackrate noremoteplayback" disablepictureinpicture
+                               preload="metadata" class="w-100 h-100 protected-media" style="object-fit:contain;background:#000">
+                            <source src="@videoSrc" />
+                            Your browser does not support embedded video.
+                        </video>
+                    </div>
+                }
+                <div class="card-body">
+                    <span class="badge text-bg-light mb-1">@v.Topic</span>
+                    <h6>@v.Title</h6>
+                    <div class="small text-muted">@v.DurationMinutes min</div>
+                    @if (ytId == null && !fileVideo)
+                    {
+                        <a class="btn btn-sm btn-outline-primary mt-2" href="@v.Url" target="_blank">Watch</a>
+                    }
+                    @if (hosted && User.IsInRole("Admin"))
+                    {
+                        <a class="btn btn-sm btn-outline-secondary mt-2" href="@Url.Action("DownloadVideo", "Media", new { id = v.Id, t = vidTok })"><em class="icon ni ni-download me-1"></em>Download</a>
+                    }
+                    @if (canManage)
+                    {
+                        <form method="post" asp-action="DeleteVideo" class="d-inline mt-2">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@v.Id" />
+                            <button class="btn btn-sm btn-outline-danger mt-2"><em class="icon ni ni-trash"></em></button>
+                        </form>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (canManage)
+{
+    <div class="modal fade" id="newVideoModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" asp-action="AddVideo" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header"><h5 class="modal-title">Add video</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="mb-3"><input name="title" class="form-control" placeholder="Title" required /></div>
+
+                        <label class="form-label small text-muted mb-1">Upload a video from your computer or a server</label>
+                        <div class="mb-2"><input name="file" type="file" accept="video/mp4,video/webm,video/quicktime,video/ogg,.mp4,.webm,.mov,.ogv" class="form-control" /></div>
+                        <div class="form-text mb-2">MP4, WebM, MOV or OGV — up to 500 MB. It streams in the hub's player.</div>
+
+                        <div class="d-flex align-items-center gap-2 my-2 text-muted small">
+                            <hr class="flex-grow-1 my-0" /><span>or</span><hr class="flex-grow-1 my-0" />
+                        </div>
+
+                        <label class="form-label small text-muted mb-1">Link an online video</label>
+                        <div class="mb-2"><input name="url" class="form-control" placeholder="Video URL (YouTube embed or direct link)" /></div>
+
+                        <div class="row mt-2">
+                            <div class="col-8 mb-2"><input name="topic" class="form-control" placeholder="Topic" /></div>
+                            <div class="col-4 mb-2"><input name="durationMinutes" type="number" value="10" class="form-control" title="Minutes" /></div>
+                        </div>
+                        <div class="form-text">Provide either an uploaded file or a link.</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary">Add</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<style>
+    /* Click-to-load facade: a thumbnail with a play button; the real YouTube player
+       is only created on demand, so the page no longer loads 20 players at once. */
+    .yt-facade { background-size: cover; background-position: center; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; background-color: #000; }
+    .yt-facade::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.15); transition: background .15s; }
+    .yt-facade:hover::after, .yt-facade:focus::after { background: rgba(0,0,0,.30); }
+    .yt-facade .yt-play { position: relative; z-index: 1; color: #fff; font-size: 3.25rem; line-height: 1;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); transition: transform .15s; }
+    .yt-facade:hover .yt-play, .yt-facade:focus .yt-play { transform: scale(1.08); }
+    .yt-facade:focus { outline: 2px solid var(--bs-primary, #6576ff); outline-offset: -2px; }
+</style>
+<script nonce="@Context.CspNonce()">
+    (function () {
+        function play(facade) {
+            var iframe = document.createElement('iframe');
+            iframe.src = facade.getAttribute('data-embed');
+            iframe.title = facade.getAttribute('data-title') || 'Video';
+            iframe.setAttribute('allow', 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture');
+            iframe.setAttribute('allowfullscreen', '');
+            facade.replaceWith(iframe); // becomes the .ratio child, filling the frame
+        }
+        document.addEventListener('click', function (e) {
+            var f = e.target.closest('.yt-facade');
+            if (f) play(f);
+        });
+        document.addEventListener('keydown', function (e) {
+            if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('yt-facade')) {
+                e.preventDefault(); play(e.target);
+            }
+        });
+        // Remove the right-click "Save video as…" path on protected (hosted) players.
+        document.addEventListener('contextmenu', function (e) {
+            if (e.target.closest('.protected-media')) e.preventDefault();
+        });
+
+        // Stop playback when the user leaves the page/tab, so a YouTube embed never keeps
+        // playing audio in the background (incl. after navigating away or the browser's
+        // back-forward cache freezing the page).
+        function ytCmd(func) {
+            document.querySelectorAll('iframe[src*="youtube"]').forEach(function (f) {
+                try { f.contentWindow.postMessage('{"event":"command","func":"' + func + '","args":""}', '*'); } catch (e) { }
+            });
+        }
+        function pauseAll() {   // gentle: keep players, just pause (tab switch)
+            ytCmd('pauseVideo');
+            document.querySelectorAll('video').forEach(function (v) { try { v.pause(); } catch (e) { } });
+        }
+        function stopAll() {    // hard: tear down players so nothing lingers (leave/close)
+            document.querySelectorAll('iframe[src*="youtube"]').forEach(function (f) { f.src = 'about:blank'; });
+            document.querySelectorAll('video').forEach(function (v) { try { v.pause(); } catch (e) { } });
+        }
+        document.addEventListener('visibilitychange', function () { if (document.hidden) pauseAll(); });
+        window.addEventListener('pagehide', stopAll);
+
+        // Auto-fill the duration (whole minutes, rounded) from the chosen video file.
+        var fileInput = document.querySelector('#newVideoModal input[name="file"]');
+        var durInput = document.querySelector('#newVideoModal input[name="durationMinutes"]');
+        if (fileInput && durInput) {
+            fileInput.addEventListener('change', function () {
+                var f = fileInput.files && fileInput.files[0];
+                if (!f) return;
+                var probe = document.createElement('video');
+                probe.preload = 'metadata';
+                var objUrl = URL.createObjectURL(f);
+                probe.onloadedmetadata = function () {
+                    URL.revokeObjectURL(objUrl);
+                    if (isFinite(probe.duration) && probe.duration > 0)
+                        durInput.value = Math.max(1, Math.round(probe.duration / 60));
+                };
+                probe.onerror = function () { URL.revokeObjectURL(objUrl); };
+                probe.src = objUrl;
+            });
+        }
+    })();
+</script>
+}

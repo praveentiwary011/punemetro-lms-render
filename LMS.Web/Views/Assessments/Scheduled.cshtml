@@ -1,0 +1,68 @@
+@model List<Quiz>
+@{
+    ViewData["Title"] = "Scheduled Assessments";
+    var attempts = (Dictionary<int, double[]>)ViewBag.MyAttempts;
+    bool isStudent = User.IsInRole("Student");
+    bool isTrainer = User.IsInRole("Instructor");
+}
+<h2 class="mb-4"><em class="icon ni ni-task-c me-2"></em>Scheduled Assessments</h2>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead>
+            <tr>
+                <th>Assessment</th><th>Course</th><th>Due</th><th>Time limit</th><th>Pass %</th>
+                @if (isStudent) { <th>Status</th> }
+                <th class="text-end"></th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="7" class="text-muted">No scheduled assessments.</td></tr>
+        }
+        @foreach (var q in Model)
+        {
+            var stats = attempts.TryGetValue(q.Id, out var s) ? s : null;
+            var overdue = q.DueDate != null && DateTime.UtcNow > q.DueDate;
+            <tr>
+                <td class="fw-semibold">@q.Title</td>
+                <td>@q.Course?.Code</td>
+                <td class="small">
+                    @(q.DueDate?.ToString("MMM d, yyyy HH:mm") ?? "Open")
+                    @if (overdue) { <span class="badge text-bg-danger">Closed</span> }
+                </td>
+                <td>@q.TimeLimitMinutes min</td>
+                <td>@q.PassingScore%</td>
+                @if (isStudent)
+                {
+                    <td>
+                        @if (stats == null) { <span class="badge text-bg-secondary">Not attempted</span> }
+                        else if (stats[1] >= q.PassingScore) { <span class="badge text-bg-success">Passed (@stats[1].ToString("0.#")%)</span> }
+                        else { <span class="badge text-bg-warning">Best @stats[1].ToString("0.#")%</span> }
+                    </td>
+                }
+                <td class="text-end">
+                    @if (isStudent)
+                    {
+                        if (!overdue)
+                        {
+                            <a class="btn btn-sm btn-primary" asp-controller="Quizzes" asp-action="Take" asp-route-id="@q.Id">Take</a>
+                        }
+                        <a class="btn btn-sm btn-outline-secondary" asp-controller="Quizzes" asp-action="MyResult" asp-route-id="@q.Id">Results</a>
+                    }
+                    else if (isTrainer || User.IsInRole("Admin"))
+                    {
+                        <a class="btn btn-sm btn-outline-primary" asp-controller="Quizzes" asp-action="Edit" asp-route-id="@q.Id">Edit</a>
+                        <a class="btn btn-sm btn-outline-secondary" asp-controller="Quizzes" asp-action="Results" asp-route-id="@q.Id">Results</a>
+                    }
+                    else
+                    {
+                        <a class="btn btn-sm btn-outline-secondary" asp-controller="Quizzes" asp-action="Results" asp-route-id="@q.Id">Results</a>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

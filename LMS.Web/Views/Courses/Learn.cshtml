@@ -1,0 +1,88 @@
+@model Course
+@{
+    var lesson = (Lesson)ViewBag.Lesson;
+    ViewData["Title"] = lesson.Title;
+    var completedIds = (List<int>)ViewBag.CompletedLessonIds;
+    var isStudent = User.IsInRole("Student");
+}
+<div class="row g-4">
+    <div class="col-lg-3">
+        <div class="card lesson-sidebar">
+            <div class="card-header text-truncate">
+                <a asp-action="Details" asp-route-id="@Model.Id" class="text-decoration-none">@Model.Title</a>
+            </div>
+            @foreach (var module in Model.Modules)
+            {
+                <div class="px-3 pt-3 pb-1 small fw-semibold text-muted text-uppercase">@module.Title</div>
+                <div class="list-group list-group-flush">
+                    @foreach (var l in module.Lessons)
+                    {
+                        <a asp-action="Learn" asp-route-id="@Model.Id" asp-route-lessonId="@l.Id"
+                           class="list-group-item list-group-item-action @(l.Id == lesson.Id ? "active" : "")">
+                            @if (completedIds.Contains(l.Id)) { <i class="bi bi-check-circle-fill text-success me-1"></i> }
+                            else { <i class="bi bi-circle me-1 text-muted"></i> }
+                            @l.Title
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+    <div class="col-lg-9">
+        <div class="card p-4">
+            <h3>@lesson.Title</h3>
+            <p class="text-muted small">@lesson.Type · @lesson.DurationMinutes min</p>
+            <hr />
+            @switch (lesson.Type)
+            {
+                case LessonType.Scorm:
+                    <div class="text-center py-4">
+                        <em class="icon ni ni-package display-4 text-primary"></em>
+                        <p class="text-muted mt-2">This is interactive standards-based content (SCORM 1.2 / cmi5).<br />Your completion and score are reported back to the LMS automatically.</p>
+                        <a class="btn btn-primary" asp-controller="Scorm" asp-action="Launch" asp-route-lessonId="@lesson.Id">
+                            <em class="icon ni ni-play me-1"></em>Launch content
+                        </a>
+                    </div>
+                    break;
+                case LessonType.Video:
+                    <div class="ratio ratio-16x9 mb-3">
+                        <iframe src="@lesson.Url" title="@lesson.Title" allowfullscreen></iframe>
+                    </div>
+                    break;
+                case LessonType.File:
+                    @if (lesson.Url != null && lesson.Url.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <iframe src="@lesson.Url" style="width:100%;height:70vh;border:1px solid #dbdfea;border-radius:4px" title="@lesson.Title"></iframe>
+                        <p class="mt-2"><a class="btn btn-sm btn-outline-primary" href="@lesson.Url" target="_blank"><em class="icon ni ni-external me-1"></em>Open in new tab</a></p>
+                    }
+                    else
+                    {
+                        <p><a class="btn btn-outline-primary" href="@lesson.Url" target="_blank"><em class="icon ni ni-download me-1"></em>Download resource</a></p>
+                    }
+                    break;
+                case LessonType.Link:
+                    <p><a class="btn btn-outline-primary" href="@lesson.Url" target="_blank"><i class="bi bi-box-arrow-up-right me-1"></i>Open resource</a></p>
+                    break;
+            }
+            @if (!string.IsNullOrEmpty(lesson.Content))
+            {
+                <div>@Html.Raw(lesson.Content)</div>
+            }
+            <hr />
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="text-muted small">
+                    @if (completedIds.Contains(lesson.Id)) { <i class="bi bi-check-circle-fill text-success me-1"></i><text>Completed</text> }
+                </span>
+                @if (isStudent && !completedIds.Contains(lesson.Id))
+                {
+                    <form method="post" asp-action="CompleteLesson">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="courseId" value="@Model.Id" />
+                        <input type="hidden" name="lessonId" value="@lesson.Id" />
+                        <button class="btn btn-success">Mark complete &amp; continue <i class="bi bi-arrow-right ms-1"></i></button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>

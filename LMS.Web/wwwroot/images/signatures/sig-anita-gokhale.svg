@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 130" role="img" aria-label="Signature of Anita Gokhale">
+  <g transform="rotate(-2 210 65)" fill="none">
+    <text x="30" y="76" textLength="360" lengthAdjust="spacingAndGlyphs"
+          font-family="'Snell Roundhand','Segoe Script','Brush Script MT',cursive" font-style="italic" font-size="54" fill="#13294b">Anita Gokhale</text>
+    <path d="M8 96 q 10 14 26 4" stroke="#13294b" stroke-width="2" stroke-linecap="round"/>
+    <path d="M16 100 C 120 114, 300 110, 404 97" stroke="#13294b" stroke-width="2.4" stroke-linecap="round"/>
+  </g>
+</svg>

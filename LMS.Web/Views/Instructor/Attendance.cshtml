@@ -1,0 +1,46 @@
+@model Course
+@{
+    ViewData["Title"] = "Attendance";
+    DateTime date = ViewBag.Date;
+    var existing = (Dictionary<string, AttendanceStatus>)ViewBag.Existing;
+}
+<h2 class="mb-1"><i class="bi bi-clipboard-check me-2"></i>Attendance</h2>
+<p class="text-muted mb-4">@Model.Code — @Model.Title</p>
+
+<form method="get" class="d-flex gap-2 mb-4" style="max-width:340px">
+    <input type="hidden" name="id" value="@Model.Id" />
+    <input name="date" type="date" value="@date.ToString("yyyy-MM-dd")" class="form-control" />
+    <button class="btn btn-outline-primary">Load</button>
+</form>
+
+<form method="post" asp-action="SaveAttendance">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="courseId" value="@Model.Id" />
+    <input type="hidden" name="date" value="@date.ToString("yyyy-MM-dd")" />
+    <div class="card" style="max-width:720px">
+        <table class="table align-middle mb-0">
+            <thead><tr><th>Student</th><th>Status for @date.ToString("MMM d, yyyy")</th></tr></thead>
+            <tbody>
+            @foreach (var e in Model.Enrollments.Where(e => e.Status != EnrollmentStatus.Dropped))
+            {
+                var current = existing.TryGetValue(e.StudentId, out var s) ? s : AttendanceStatus.Present;
+                <tr>
+                    <td>@e.Student?.FullName</td>
+                    <td>
+                        <select name="statuses[@e.StudentId]" class="form-select form-select-sm" style="max-width:160px">
+                            @foreach (AttendanceStatus st in Enum.GetValues<AttendanceStatus>())
+                            {
+                                if (st == current) { <option selected value="@st">@st</option> }
+                                else { <option value="@st">@st</option> }
+                            }
+                        </select>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <div class="card-body">
+            <button class="btn btn-primary">Save attendance</button>
+        </div>
+    </div>
+</form>

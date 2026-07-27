@@ -1,0 +1,53 @@
+@model LoginVm
+@{
+    ViewData["Title"] = "Sign in";
+}
+<div class="row justify-content-center py-5">
+    <div class="col-md-5 col-lg-4">
+        <div class="card p-4">
+            <h4 class="mb-3 text-center">Sign in</h4>
+            @if (TempData["Err"] != null)
+            {
+                <div class="alert alert-warning py-2 small">@TempData["Err"]</div>
+            }
+            <div asp-validation-summary="All" class="text-danger small"></div>
+            <form method="post" asp-action="Login" asp-route-returnUrl="@ViewBag.ReturnUrl">
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input asp-for="Email" class="form-control" autofocus />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input asp-for="Password" class="form-control" />
+                </div>
+                <div class="form-check mb-3">
+                    <input asp-for="RememberMe" class="form-check-input" />
+                    <label class="form-check-label" asp-for="RememberMe">Remember me</label>
+                </div>
+                <button class="btn btn-primary w-100">Sign in</button>
+            </form>
+
+            @{ var ssoCfg = ViewBag.Sso as LMS.Web.Models.SsoConfiguration; }
+            @if (ssoCfg != null)
+            {
+                <div class="text-center text-muted my-3 small position-relative">
+                    <hr /><span class="px-2 bg-white position-absolute top-50 start-50 translate-middle">or</span>
+                </div>
+                <form method="post" asp-action="ExternalLogin" asp-route-returnUrl="@ViewBag.ReturnUrl">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-outline-primary w-100" type="submit">
+                        <em class="icon ni ni-shield-check me-1"></em>Sign in with @ssoCfg.DisplayName
+                    </button>
+                </form>
+            }
+            <form class="d-none">
+            </form>
+            <hr />
+            <p class="small text-center text-muted mb-2">Accounts are provisioned by your organisation's administrator.</p>
+            <div class="small text-muted border rounded p-2">
+                <strong>Demo accounts</strong> (password <code>Pass@123</code>):<br />
+                superuser@absolutesys.in · admin@punemetro.in · principal@punemetro.in · trainer@punemetro.in · trainee@punemetro.in
+            </div>
+        </div>
+    </div>
+</div>

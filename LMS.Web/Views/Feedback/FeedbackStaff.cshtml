@@ -1,0 +1,49 @@
+@model List<CourseFeedback>
+@{
+    ViewData["Title"] = "Course Feedback";
+    var summary = (List<FeedbackSummaryRow>)ViewBag.Summary;
+}
+<h2 class="mb-4"><em class="icon ni ni-star me-2"></em>Course Feedback</h2>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">Ratings summary</div>
+            <ul class="list-group list-group-flush">
+                @if (!summary.Any())
+                {
+                    <li class="list-group-item text-muted">No feedback yet.</li>
+                }
+                @foreach (var s in summary)
+                {
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>@s.Course.Code — @s.Course.Title</span>
+                        <span class="text-nowrap"><span class="text-warning">★</span> @s.Avg.ToString("0.0") <span class="text-muted small">(@s.Count)</span></span>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">All responses</div>
+            <ul class="list-group list-group-flush">
+                @if (!Model.Any())
+                {
+                    <li class="list-group-item text-muted">No feedback submitted yet.</li>
+                }
+                @foreach (var f in Model)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <strong>@f.Course?.Code · @f.Student?.FullName</strong>
+                            <span class="text-warning">@(new string('★', f.Rating))@(new string('☆', 5 - f.Rating))</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(f.Comments)) { <div class="small text-muted">@f.Comments</div> }
+                        <div class="small text-muted">@f.SubmittedAt.ToString("MMM d, yyyy")</div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>

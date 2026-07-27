@@ -1,0 +1,72 @@
+@model List<SiteSetting>
+@{
+    ViewData["Title"] = "Site settings";
+    var mode = Model.FirstOrDefault(s => s.Key == "GradingMode")?.Value ?? "Cpu";
+}
+<h2 class="mb-4"><i class="bi bi-gear me-2"></i>Site settings</h2>
+
+@if (TempData["Ok"] != null) { <div class="alert alert-success">@TempData["Ok"]</div> }
+@if (TempData["Err"] != null) { <div class="alert alert-danger">@TempData["Err"]</div> }
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card p-4">
+            <form method="post" asp-action="SaveSettings">
+                @Html.AntiForgeryToken()
+                @foreach (var s in Model.Where(s => s.Key != "GradingMode"))
+                {
+                    <div class="mb-3">
+                        <label class="form-label">@s.Key</label>
+                        <input name="settings[@s.Key]" value="@s.Value" class="form-control" />
+                    </div>
+                }
+                <button class="btn btn-primary">Save settings</button>
+            </form>
+        </div>
+        <p class="text-muted small mt-3">
+            <strong>SiteName</strong> is shown in the header. <strong>AllowSelfRegistration</strong> and
+            <strong>DefaultPassingGrade</strong> are available to extend registration and grading policies.
+        </p>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card p-4">
+            <h5 class="mb-1"><i class="bi bi-robot me-2"></i>Subjective answer grading</h5>
+            <p class="text-muted small">
+                Free-text (subjective) exam answers are graded automatically on this server by a local
+                Qwen&nbsp;2.5 model (Ollama), scored against each question's rubric and passages retrieved
+                from your course material — no external service, no per-use cost. Choose the profile that
+                matches this server's hardware.
+            </p>
+            <form method="post" asp-action="SaveSettings">
+                @Html.AntiForgeryToken()
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="settings[GradingMode]" id="modeCpu" value="Cpu" @(mode != "Gpu" ? "checked" : "") />
+                    <label class="form-check-label" for="modeCpu">
+                        <strong>CPU mode</strong> <span class="badge text-bg-light border">default</span><br />
+                        <span class="text-muted small">Qwen&nbsp;2.5&nbsp;7B · graded in the background — the trainee sees “Assessment Pending” until the result is ready. For servers without a GPU.</span>
+                    </label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="settings[GradingMode]" id="modeGpu" value="Gpu" @(mode == "Gpu" ? "checked" : "") />
+                    <label class="form-check-label" for="modeGpu">
+                        <strong>GPU mode</strong><br />
+                        <span class="text-muted small">Qwen&nbsp;2.5&nbsp;14B · graded instantly — the score is shown on submit. Requires an NVIDIA GPU.</span>
+                    </label>
+                </div>
+                <button class="btn btn-primary">Save grading mode</button>
+            </form>
+            <hr />
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <strong class="small">Knowledge index</strong>
+                    <div class="text-muted small">Rebuild the searchable index of course material the grader checks answers against. Run after adding or editing courses/lessons.</div>
+                </div>
+                <form method="post" asp-action="ReindexKnowledge" class="ms-3">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-outline-secondary btn-sm text-nowrap"><i class="bi bi-arrow-repeat me-1"></i>Re-index knowledge</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,107 @@
+@model LMS.Web.Models.SsoConfiguration
+@{
+    ViewData["Title"] = "Single sign-on";
+    var orgRoles = ViewBag.OrgRoles as List<string> ?? new List<string>();
+}
+<h2 class="mb-1"><em class="icon ni ni-shield-check me-2"></em>Single sign-on</h2>
+<p class="text-muted mb-4">Let <strong>@ViewBag.OrganisationName</strong> sign in with its own identity provider (Microsoft Entra ID, Google Workspace, Okta, Keycloak…) using OpenID Connect.</p>
+
+@if (TempData["Ok"] != null) { <div class="alert alert-success">@TempData["Ok"]</div> }
+@if (TempData["Err"] != null) { <div class="alert alert-danger">@TempData["Err"]</div> }
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card p-4">
+            <form method="post" asp-action="SaveSso">
+                @Html.AntiForgeryToken()
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" name="isEnabled" value="true" id="ssoEnabled" @(Model.IsEnabled ? "checked" : "") />
+                    <label class="form-check-label fw-semibold" for="ssoEnabled">Enable single sign-on for this organisation</label>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Button label on the sign-in page</label>
+                    <input name="displayName" class="form-control" value="@Model.DisplayName" placeholder="e.g. your Pune Metro account" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Authority (issuer URL) <span class="text-danger">*</span></label>
+                    <input name="authority" class="form-control" value="@Model.Authority" placeholder="https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0" />
+                    <div class="form-text">Discovery is read from <code>{authority}/.well-known/openid-configuration</code>.</div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-semibold">Client ID <span class="text-danger">*</span></label>
+                        <input name="clientId" class="form-control" value="@Model.ClientId" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-semibold">Client secret</label>
+                        <input name="clientSecret" type="password" class="form-control" autocomplete="new-password"
+                               placeholder="@(string.IsNullOrEmpty(Model.ClientSecretProtected) ? "not set" : "•••••••• (leave blank to keep)")" />
+                        <div class="form-text">Stored encrypted; never displayed again.</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Email domains <span class="text-danger">*</span></label>
+                    <input name="emailDomains" class="form-control" value="@Model.EmailDomains" placeholder="punemetro.in, maha-metro.in" />
+                    <div class="form-text">Only verified addresses in these domains may sign in through this provider.</div>
+                </div>
+
+                <hr />
+                <h6 class="mb-2">Roles</h6>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-semibold">Group/role claim</label>
+                        <input name="roleClaimName" class="form-control" value="@Model.RoleClaimName" placeholder="groups" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-semibold">Default role</label>
+                        <input name="defaultRole" class="form-control" value="@Model.DefaultRole" list="orgRoleList" />
+                        <datalist id="orgRoleList">@foreach (var r in orgRoles) { <option value="@r"></option> }</datalist>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Group → role mapping</label>
+                    <textarea name="roleMappings" class="form-control" rows="4" placeholder="LMS-Trainers = Trainer&#10;LMS-Admins = Admin">@Model.RoleMappings</textarea>
+                    <div class="form-text">One per line: <code>IdP group = LMS organisation role</code>. Available roles: @(orgRoles.Any() ? string.Join(", ", orgRoles) : "none defined yet")</div>
+                </div>
+
+                <hr />
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="jitProvisioning" value="true" id="jit" @(Model.JitProvisioning ? "checked" : "") />
+                    <label class="form-check-label" for="jit"><strong>Create accounts automatically</strong> on first successful sign-in
+                        <div class="small text-muted">Restricted to the email domains above. Turn off to require accounts to exist first.</div></label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" name="allowLocalPassword" value="true" id="local" @(Model.AllowLocalPassword ? "checked" : "") />
+                    <label class="form-check-label" for="local"><strong>Also allow password sign-in</strong>
+                        <div class="small text-muted">Turn off to require SSO. Super Users can always sign in with a password, so an identity-provider outage can never lock you out.</div></label>
+                </div>
+
+                <button class="btn btn-primary">Save single sign-on settings</button>
+            </form>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card p-4">
+            <h6 class="mb-2">Give these to your IdP administrator</h6>
+            <div class="mb-2">
+                <label class="form-label small fw-semibold mb-1">Redirect URI (callback)</label>
+                <input class="form-control form-control-sm" readonly value="@ViewBag.CallbackUrl" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-semibold mb-1">Sign-out redirect</label>
+                <input class="form-control form-control-sm" readonly value="@($"{Context.Request.Scheme}://{Context.Request.Host}/")" />
+            </div>
+            <div class="small text-muted">
+                <strong>Required scopes:</strong> <code>openid profile email</code><br />
+                <strong>Flow:</strong> authorization code with PKCE<br />
+                <strong>Claims needed:</strong> <code>sub</code>, <code>email</code> (verified), <code>name</code>, and your group claim if you map roles.
+            </div>
+            <hr />
+            <div class="small text-muted">
+                <em class="icon ni ni-alert-circle me-1"></em>Test with a non-administrator account first. Every SSO sign-in still passes the same
+                account, organisation and licence checks as a password sign-in.
+            </div>
+        </div>
+    </div>
+</div>

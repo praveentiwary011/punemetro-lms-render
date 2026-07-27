@@ -1,0 +1,166 @@
+@using LMS.Web.Services
+@inject LMS.Web.Data.AppDbContext Db
+@{
+    ViewData["Title"] = "My Learning";
+    var orgName = await Branding.OrgNameAsync(Db, User);
+    var enrollments = (List<Enrollment>)ViewBag.Enrollments;
+    var completedIds = (List<int>)ViewBag.CompletedLessonIds;
+    var assignments = (List<Assignment>)ViewBag.UpcomingAssignments;
+    var announcements = (List<Announcement>)ViewBag.RecentAnnouncements;
+    var topCourses = (List<PopularCourseRow>)ViewBag.TopCourses;
+    var activeEnrollments = enrollments.Where(e => e.Status != EnrollmentStatus.Dropped).ToList();
+    var chartRows = activeEnrollments.Select(e =>
+    {
+        var lessons = e.Course!.Modules.SelectMany(m => m.Lessons).ToList();
+        return new { Code = e.Course.Code, Planned = lessons.Count, Actual = lessons.Count(l => completedIds.Contains(l.Id)) };
+    }).ToList();
+}
+<div class="nk-block-head nk-block-head-sm">
+    <div class="nk-block-between">
+        <div class="nk-block-head-content">
+            <h3 class="nk-block-title page-title">Employee Learning Dashboard</h3>
+            <div class="nk-block-des text-soft"><p>Your training progress at @orgName.</p></div>
+        </div>
+        <div class="nk-block-head-content">
+            <a class="btn btn-sm btn-primary" asp-controller="Courses" asp-action="Catalog"><em class="icon ni ni-plus me-1"></em>Enroll in a course</a>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-8">
+        <div class="card p-3 h-100">
+            <h6 class="mb-1">Training | Planned vs Actual</h6>
+            <div class="text-muted small mb-2">Lessons in your courses vs lessons you've completed</div>
+            <canvas id="plannedChart" height="110"></canvas>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="card h-100">
+            <div class="card-header">@orgName — Top 5 Courses</div>
+            <ul class="list-group list-group-flush">
+                @foreach (var t in topCourses)
+                {
+                    <li class="list-group-item">
+                        <a asp-controller="Courses" asp-action="Details" asp-route-id="@t.Id" class="text-decoration-none"><strong>@t.Code</strong> — @t.Title</a>
+                        <div class="small text-muted">@t.Instructor · @t.Enrolled enrolled</div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        @if (!activeEnrollments.Any())
+        {
+            <div class="card p-5 text-center">
+                <p class="text-muted mb-3">You're not enrolled in any courses yet.</p>
+                <a class="btn btn-primary mx-auto" asp-controller="Courses" asp-action="Catalog">Browse the catalog</a>
+            </div>
+        }
+        <div class="row g-4">
+            @foreach (var e in activeEnrollments)
+            {
+                var lessons = e.Course!.Modules.SelectMany(m => m.Lessons).ToList();
+                var done = lessons.Count(l => completedIds.Contains(l.Id));
+                var pct = lessons.Count == 0 ? 0 : (int)((double)done / lessons.Count * 100);
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="course-thumb"><em class="icon ni ni-book"></em></div>
+                        <div class="card-body">
+                            <span class="badge text-bg-light mb-1">@e.Course.Code</span>
+                            @if (e.Status == EnrollmentStatus.Completed)
+                            {
+                                <span class="badge text-bg-success mb-1">Completed</span>
+                            }
+                            <h5 class="card-title">@e.Course.Title</h5>
+                            <div class="d-flex justify-content-between small text-muted mb-1">
+                                <span>@done of @lessons.Count lessons</span><span>@pct%</span>
+                            </div>
+                            <div class="progress mb-3">
+                                <div class="progress-bar" style="width:@(pct)%;background:#6576ff"></div>
+                            </div>
+                            <a class="btn btn-sm btn-primary" asp-controller="Courses" asp-action="Learn" asp-route-id="@e.CourseId">
+                                @(pct == 0 ? "Start" : "Continue") <em class="icon ni ni-arrow-right ms-1"></em>
+                            </a>
+                            <a class="btn btn-sm btn-outline-light" asp-controller="Courses" asp-action="Details" asp-route-id="@e.CourseId">Overview</a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header"><em class="icon ni ni-clock me-1"></em>Upcoming deadlines</div>
+            <ul class="list-group list-group-flush">
+                @if (!assignments.Any())
+                {
+                    <li class="list-group-item text-muted">Nothing due soon. 🎉</li>
+                }
+                @foreach (var a in assignments)
+                {
+                    <li class="list-group-item">
+                        <a asp-controller="Assignments" asp-action="Details" asp-route-id="@a.Id" class="text-decoration-none">@a.Title</a>
+                        <div class="small text-muted">@a.Course!.Code · due @a.DueDate!.Value.ToString("MMM d, yyyy")</div>
+                    </li>
+                }
+            </ul>
+        </div>
+        <div class="card">
+            <div class="card-header"><em class="icon ni ni-notify me-1"></em>Announcements</div>
+            <ul class="list-group list-group-flush">
+                @if (!announcements.Any())
+                {
+                    <li class="list-group-item text-muted">No announcements.</li>
+                }
+                @foreach (var a in announcements)
+                {
+                    <li class="list-group-item">
+                        <strong>@a.Title</strong>
+                        @if (a.Course != null)
+                        {
+                            <span class="badge text-bg-light">@a.Course.Code</span>
+                        }
+                        <div class="small text-muted">@a.Body</div>
+                        <div class="small text-muted">@a.CreatedAt.ToString("MMM d") · @(a.Author?.FullName ?? "Staff")</div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/lib/chart.js/chart.umd.min.js"></script>
+<script src="/lib/chartjs-plugin-datalabels/chartjs-plugin-datalabels.min.js"></script>
+<script nonce="@Context.CspNonce()">
+    Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'DM Sans', sans-serif";
+    Chart.defaults.color = '#8094ae';
+    const rows = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(chartRows));
+    new Chart(document.getElementById('plannedChart'), {
+        type: 'bar',
+        data: {
+            labels: rows.map(r => r.Code),
+            datasets: [
+                { label: 'Planned lessons', data: rows.map(r => r.Planned), backgroundColor: 'rgba(101,118,255,.85)', borderRadius: 6, maxBarThickness: 36 },
+                { label: 'Completed', data: rows.map(r => r.Actual), backgroundColor: 'rgba(30,224,172,.9)', borderRadius: 6, maxBarThickness: 36 }
+            ]
+        },
+        options: {
+            layout: { padding: { top: 28 } },
+            scales: {
+                x: { grid: { display: false }, border: { display: false } },
+                y: { grid: { display: false }, border: { display: false }, beginAtZero: true, ticks: { precision: 0 } }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 16 } },
+                datalabels: { color: '#526484', font: { weight: 600, size: 11 }, anchor: 'end', align: 'top', clamp: true }
+            }
+        }
+    });
+</script>
+}

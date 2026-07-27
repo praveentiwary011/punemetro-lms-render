@@ -1,0 +1,28 @@
+@using LMS.Web.Services.Setup
+@model SetupWizardState
+@{
+    Layout = "_Wizard";
+    ViewData["Title"] = "Welcome";
+    var checks = (List<PrereqCheck>)ViewBag.Checks;
+}
+<h1>Welcome — let's set up your LMS</h1>
+<p class="sub">This short wizard configures everything: your database, your organisation, an administrator account and the built-in AI grading. It takes a couple of minutes and only runs once.</p>
+
+<h2 style="font-size:.95rem;margin:0 0 8px">Server check</h2>
+<ul class="checks">
+    @foreach (var c in checks)
+    {
+        var cls = !c.Ok ? "bad" : (c.Warning ? "warn" : "ok");
+        var mark = !c.Ok ? "✗" : (c.Warning ? "!" : "✓");
+        <li>
+            <span class="ic @cls">@mark</span>
+            <span><strong>@c.Name</strong><div class="d">@c.Detail</div></span>
+        </li>
+    }
+</ul>
+<p class="hint">A warning is fine to continue with — it only affects performance or capacity.</p>
+
+<div class="actions">
+    <span class="back"></span>
+    <a class="btn btn-primary" asp-action="Database">Get started</a>
+</div>

@@ -1,0 +1,75 @@
+@model List<CourseReportRow>
+@{
+    ViewData["Title"] = "Reports";
+}
+<h2 class="mb-4"><i class="bi bi-graph-up me-2"></i>Course analytics</h2>
+
+<div class="card mb-4 p-3">
+    <canvas id="reportChart" height="90"></canvas>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Course</th><th>Enrolled</th><th>Completed</th>
+                    <th>Avg lesson progress</th><th>Avg quiz score</th>
+                    <th>Graded</th><th>Pending grading</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var r in Model)
+            {
+                <tr>
+                    <td><strong>@r.Course.Code</strong> — @r.Course.Title</td>
+                    <td>@r.Enrolled</td>
+                    <td>@r.Completed</td>
+                    <td style="min-width:140px">
+                        <div class="progress"><div class="progress-bar" style="width:@(r.AvgProgress.ToString("0"))%"></div></div>
+                        <span class="small text-muted">@r.AvgProgress.ToString("0.#")%</span>
+                    </td>
+                    <td>@r.AvgQuizScore.ToString("0.#")%</td>
+                    <td>@r.SubmissionsGraded</td>
+                    <td>
+                        @if (r.SubmissionsPending > 0) { <span class="badge text-bg-warning">@r.SubmissionsPending</span> }
+                        else { <span class="text-muted">0</span> }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/lib/chart.js/chart.umd.min.js"></script>
+<script src="/lib/chartjs-plugin-datalabels/chartjs-plugin-datalabels.min.js"></script>
+<script nonce="@Context.CspNonce()">
+    Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'DM Sans', sans-serif";
+    Chart.defaults.color = '#8094ae';
+    const rows = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Select(r => new { title = r.Course.Code, enrolled = r.Enrolled, completed = r.Completed, progress = Math.Round(r.AvgProgress, 1) })));
+    new Chart(document.getElementById('reportChart'), {
+        type: 'bar',
+        data: {
+            labels: rows.map(r => r.title),
+            datasets: [
+                { label: 'Enrolled', data: rows.map(r => r.enrolled), backgroundColor: 'rgba(101,118,255,.9)', borderRadius: 6, maxBarThickness: 28 },
+                { label: 'Completed', data: rows.map(r => r.completed), backgroundColor: 'rgba(30,224,172,.9)', borderRadius: 6, maxBarThickness: 28 }
+            ]
+        },
+        options: {
+            layout: { padding: { top: 28 } },
+            scales: {
+                x: { grid: { display: false }, border: { display: false } },
+                y: { grid: { display: false }, border: { display: false }, beginAtZero: true, ticks: { precision: 0 } }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 16 } },
+                datalabels: { color: '#526484', font: { weight: 600, size: 10 }, anchor: 'end', align: 'top', clamp: true }
+            }
+        }
+    });
+</script>
+}

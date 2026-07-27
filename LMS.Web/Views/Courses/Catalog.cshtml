@@ -1,0 +1,50 @@
+@model List<Course>
+@{
+    ViewData["Title"] = "Course catalog";
+    var categories = (List<Category>)ViewBag.Categories;
+    var myEnrollments = (List<int>)ViewBag.MyEnrollments;
+}
+<h2 class="mb-4"><i class="bi bi-collection me-2"></i>Course catalog</h2>
+
+<form method="get" class="row g-2 mb-4">
+    <div class="col-md-4"><input name="q" value="@ViewBag.Query" class="form-control" placeholder="Search courses…" /></div>
+    <div class="col-md-3">
+        <select name="categoryId" class="form-select">
+            <option value="">All categories</option>
+            @foreach (var c in categories)
+            {
+                if (ViewBag.CategoryId == c.Id) { <option selected value="@c.Id">@c.Name</option> }
+                else { <option value="@c.Id">@c.Name</option> }
+            }
+        </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-primary">Search</button></div>
+</form>
+
+<div class="row g-4">
+    @if (!Model.Any())
+    {
+        <p class="text-muted">No courses match your search.</p>
+    }
+    @foreach (var c in Model)
+    {
+        <div class="col-md-6 col-lg-4 col-xl-3">
+            <div class="card h-100">
+                <div class="course-thumb"><i class="bi bi-journal-bookmark"></i></div>
+                <div class="card-body d-flex flex-column">
+                    <div class="mb-1">
+                        <span class="badge text-bg-light">@c.Code</span>
+                        @if (c.Category != null) { <span class="badge text-bg-secondary">@c.Category.Name</span> }
+                        @if (myEnrollments.Contains(c.Id)) { <span class="badge text-bg-success">Enrolled</span> }
+                    </div>
+                    <h5 class="card-title">@c.Title</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        @(c.Description.Length > 120 ? c.Description[..120] + "…" : c.Description)
+                    </p>
+                    <div class="small text-muted mb-2"><i class="bi bi-person me-1"></i>@c.Instructor?.FullName · @c.Enrollments.Count enrolled</div>
+                    <a class="btn btn-outline-primary btn-sm" asp-action="Details" asp-route-id="@c.Id">View course</a>
+                </div>
+            </div>
+        </div>
+    }
+</div>

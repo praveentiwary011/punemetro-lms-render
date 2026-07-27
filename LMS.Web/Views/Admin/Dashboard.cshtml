@@ -1,0 +1,200 @@
+@using LMS.Web.Services
+@inject LMS.Web.Data.AppDbContext Db
+@model AdminDashboardVm
+@{
+    ViewData["Title"] = "Dashboard";
+    var orgName = await Branding.OrgNameAsync(Db, User);
+}
+<div class="nk-block-head nk-block-head-sm">
+    <div class="nk-block-between">
+        <div class="nk-block-head-content">
+            <h3 class="nk-block-title page-title">Dashboard</h3>
+            <div class="nk-block-des text-soft"><p>@orgName training overview.</p></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3">
+        <div class="card p-3 stat-card"><div class="text-muted small text-uppercase">Staff on platform</div><div class="display-6">@Model.Users</div><span class="small text-success"><em class="icon ni ni-user-check"></em> @Model.ActiveTrainees active last 30 days</span></div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card p-3 stat-card"><div class="text-muted small text-uppercase">Enrollments</div><div class="display-6">@Model.Enrollments</div><span class="small text-success"><em class="icon ni ni-check-circle"></em> @Model.Completions completed</span></div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card p-3 stat-card"><div class="text-muted small text-uppercase">Training programmes</div><div class="display-6">@Model.Courses</div><span class="small text-muted">@Model.CertificatesIssued certificates issued</span></div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card p-3 stat-card"><div class="text-muted small text-uppercase">Awaiting grading</div><div class="display-6">@Model.PendingGrading</div><span class="small text-muted">submissions in queue</span></div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-8">
+        <div class="card p-3 h-100">
+            <div class="d-flex justify-content-between">
+                <h6 class="mb-1">Training | Planned vs Delivered</h6>
+                <span class="text-muted small">last 6 months</span>
+            </div>
+            <div class="text-muted small mb-2">Enrollments vs completions per month</div>
+            <canvas id="trendChart" height="120"></canvas>
+        </div>
+    </div>
+    <div class="col-xl-4">
+        <div class="card p-3 h-100">
+            <h6 class="mb-1">Mode of Training</h6>
+            <div class="text-muted small mb-2">Scheduled sessions by delivery mode</div>
+            <canvas id="modeChart" height="180"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xxl-5 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">@orgName — Top 5 Courses</div>
+            <div class="table-responsive">
+            <table class="table mb-0 align-middle">
+                <thead><tr><th>Course</th><th>Enrolled</th><th>Completed</th><th>Rating</th></tr></thead>
+                <tbody>
+                @foreach (var c in Model.TopCourses)
+                {
+                    <tr>
+                        <td><strong>@c.Code</strong><div class="small text-muted text-truncate" style="max-width:220px">@c.Title</div></td>
+                        <td>@c.Enrolled</td>
+                        <td>@c.Completed</td>
+                        <td>@(c.AvgRating > 0 ? $"★ {c.AvgRating:0.0}" : "—")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-4 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Top Instructors / Trainers</div>
+            <div class="table-responsive">
+            <table class="table mb-0 align-middle">
+                <thead><tr><th>Trainer</th><th>Courses</th><th>Students</th><th>Rating</th></tr></thead>
+                <tbody>
+                @foreach (var i in Model.TopInstructors)
+                {
+                    <tr>
+                        <td>@i.Name</td><td>@i.Courses</td><td>@i.Students</td>
+                        <td>@(i.AvgRating > 0 ? $"★ {i.AvgRating:0.0}" : "—")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-xxl-3 col-lg-6">
+        <div class="card p-3 h-100">
+            <h6 class="mb-1">Top Categories</h6>
+            <div class="text-muted small mb-2">by enrollment</div>
+            <canvas id="categoryChart" height="220"></canvas>
+        </div>
+    </div>
+</div>
+
+@if (Model.ShowAudit)
+{
+    <div class="row g-4">
+        <div class="col-xl-6">
+            <div class="card h-100">
+                <div class="card-header">Newest users</div>
+                <ul class="list-group list-group-flush">
+                    @foreach (var u in Model.RecentUsers)
+                    {
+                        <li class="list-group-item small d-flex justify-content-between">
+                            <span><strong>@u.FullName</strong> <span class="text-muted">· @u.Department</span></span>
+                            <span class="text-muted">@u.Email</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between"><span>Recent activity</span><a class="small" asp-action="AuditLog">Full audit log →</a></div>
+                <ul class="list-group list-group-flush">
+                    @foreach (var log in Model.RecentAudit)
+                    {
+                        <li class="list-group-item small">
+                            <span class="badge text-bg-light me-1">@log.Action</span> @log.UserName
+                            <span class="text-muted">· @log.Timestamp.ToString("MMM d HH:mm")</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script src="/lib/chart.js/chart.umd.min.js"></script>
+<script src="/lib/chartjs-plugin-datalabels/chartjs-plugin-datalabels.min.js"></script>
+<script nonce="@Context.CspNonce()">
+    const palette = ['#6576ff', '#1ee0ac', '#f4bd0e', '#e85347', '#816bff', '#09c2de', '#ff82b7', '#2dc58c'];
+    Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'DM Sans', sans-serif";
+    Chart.defaults.color = '#8094ae';
+    const noGrid = {
+        x: { grid: { display: false }, border: { display: false } },
+        y: { grid: { display: false }, border: { display: false }, beginAtZero: true, ticks: { precision: 0 } }
+    };
+
+    const trend = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.EnrollTrend));
+    const completions = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CompletionTrend));
+    new Chart(document.getElementById('trendChart'), {
+        type: 'bar',
+        data: {
+            labels: trend.map(t => t.Name),
+            datasets: [
+                { label: 'Planned (enrollments)', data: trend.map(t => t.Count), backgroundColor: '#6576ff', borderRadius: 4, borderSkipped: 'start', maxBarThickness: 24 },
+                { label: 'Delivered (completions)', data: completions.map(t => t.Count), backgroundColor: '#12b886', borderRadius: 4, borderSkipped: 'start', maxBarThickness: 24 }
+            ]
+        },
+        options: {
+            scales: noGrid,
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 16 } },
+                datalabels: { display: false }
+            }
+        }
+    });
+
+    new Chart(document.getElementById('modeChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Online', 'Offline (classroom)'],
+            datasets: [{ data: [@Model.SessionsOnline, @Model.SessionsOffline], backgroundColor: ['#6576ff', '#1ee0ac'], borderWidth: 0, hoverOffset: 6 }]
+        },
+        options: {
+            cutout: '65%',
+            plugins: {
+                legend: { position: 'bottom' },
+                datalabels: { color: '#fff', font: { weight: 700, size: 13 } }
+            }
+        }
+    });
+
+    const cats = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TopCategories));
+    new Chart(document.getElementById('categoryChart'), {
+        type: 'doughnut',
+        data: {
+            labels: cats.map(c => c.Name),
+            datasets: [{ data: cats.map(c => c.Count), backgroundColor: palette, borderWidth: 0, hoverOffset: 6 }]
+        },
+        options: {
+            cutout: '55%',
+            plugins: {
+                legend: { position: 'bottom' },
+                datalabels: { color: '#fff', font: { weight: 700, size: 12 } }
+            }
+        }
+    });
+</script>
+}

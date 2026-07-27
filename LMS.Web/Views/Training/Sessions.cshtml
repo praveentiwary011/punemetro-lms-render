@@ -1,0 +1,93 @@
+@model List<TrainingSession>
+@{
+    ViewData["Title"] = "Upcoming Sessions";
+    bool canManage = ViewBag.CanManage;
+    var courses = (List<Course>)ViewBag.Courses;
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><em class="icon ni ni-calendar-booking me-2"></em>Upcoming Sessions (Online/Offline)</h2>
+    @if (canManage)
+    {
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newSessionModal"><em class="icon ni ni-plus me-1"></em>Schedule session</button>
+    }
+</div>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Session</th><th>Course</th><th>Mode</th><th>Location / Link</th><th>Trainer</th><th>When</th>@if (canManage) { <th></th> }</tr></thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="7" class="text-muted">No upcoming sessions scheduled.</td></tr>
+        }
+        @foreach (var s in Model)
+        {
+            <tr>
+                <td><strong>@s.Title</strong>@if (!string.IsNullOrEmpty(s.Notes)) { <div class="small text-muted">@s.Notes</div> }</td>
+                <td>@(s.Course?.Code ?? "—")</td>
+                <td>
+                    @if (s.Mode == SessionMode.Online) { <span class="badge text-bg-info">Online</span> }
+                    else { <span class="badge text-bg-success">Offline</span> }
+                </td>
+                <td class="small">
+                    @if (s.Mode == SessionMode.Online && s.Location.StartsWith("http")) { <a href="@s.Location" target="_blank">Join link</a> }
+                    else { @s.Location }
+                </td>
+                <td>@s.Trainer?.FullName</td>
+                <td class="small text-nowrap">@s.Start.ToString("ddd, MMM d · HH:mm")–@s.End.ToString("HH:mm")</td>
+                @if (canManage)
+                {
+                    <td class="text-end">
+                        <form method="post" asp-action="DeleteSession" data-confirm="Cancel this session?">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@s.Id" />
+                            <button class="btn btn-sm btn-outline-danger"><em class="icon ni ni-trash"></em></button>
+                        </form>
+                    </td>
+                }
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@if (canManage)
+{
+    <div class="modal fade" id="newSessionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" asp-action="CreateSession">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header"><h5 class="modal-title">Schedule training session</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="mb-2"><input name="title" class="form-control" placeholder="Session title" required /></div>
+                        <div class="mb-2">
+                            <select name="courseId" class="form-select">
+                                <option value="">No linked course</option>
+                                @foreach (var c in courses)
+                                {
+                                    <option value="@c.Id">@c.Code — @c.Title</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-4 mb-2">
+                                <select name="mode" class="form-select"><option value="0">Online</option><option value="1">Offline</option></select>
+                            </div>
+                            <div class="col-8 mb-2"><input name="location" class="form-control" placeholder="Meeting link or venue" required /></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-6 mb-2"><label class="form-label small">Start</label><input name="start" type="datetime-local" class="form-control" required /></div>
+                            <div class="col-6 mb-2"><label class="form-label small">End</label><input name="end" type="datetime-local" class="form-control" required /></div>
+                        </div>
+                        <div class="mb-2"><textarea name="notes" class="form-control" rows="2" placeholder="Notes (optional)"></textarea></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary">Schedule &amp; notify</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}

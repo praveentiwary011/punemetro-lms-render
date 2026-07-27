@@ -1,0 +1,23 @@
+@model List<Certificate>
+@{
+    ViewData["Title"] = "My certificates";
+}
+<h2 class="mb-4"><i class="bi bi-award me-2"></i>My certificates</h2>
+<div class="row g-4">
+    @if (!Model.Any())
+    {
+        <p class="text-muted">Complete a course to earn your first certificate.</p>
+    }
+    @foreach (var c in Model)
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card p-4 text-center">
+                <i class="bi bi-award-fill text-warning display-4"></i>
+                <h5 class="mt-2">@c.Enrollment?.Course?.Title</h5>
+                <p class="text-muted small mb-1">Issued @c.IssuedAt.ToString("MMMM d, yyyy")</p>
+                <p class="text-muted small">Serial: @c.SerialNumber</p>
+                <a class="btn btn-primary btn-sm" asp-action="Show" asp-route-id="@c.Id">View &amp; print</a>
+            </div>
+        </div>
+    }
+</div>

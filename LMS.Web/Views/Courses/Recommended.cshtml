@@ -1,0 +1,31 @@
+@model List<Course>
+@{
+    ViewData["Title"] = "Recommended Training";
+}
+<h2 class="mb-1"><em class="icon ni ni-bulb me-2"></em>Recommended Training</h2>
+<p class="text-muted mb-4">Based on mandatory compliance requirements and your current enrollments.</p>
+
+<div class="row g-4">
+    @if (!Model.Any())
+    {
+        <p class="text-muted">You're enrolled in everything available — great job!</p>
+    }
+    @foreach (var c in Model)
+    {
+        <div class="col-md-6 col-lg-4 col-xl-3">
+            <div class="card h-100">
+                <div class="course-thumb"><em class="icon ni ni-book"></em></div>
+                <div class="card-body d-flex flex-column">
+                    <div class="mb-1">
+                        <span class="badge text-bg-light">@c.Code</span>
+                        @if (c.Kind == CourseKind.Compliance) { <span class="badge text-bg-danger">Mandatory</span> }
+                        else { <span class="badge text-bg-secondary">@c.Kind</span> }
+                    </div>
+                    <h5>@c.Title</h5>
+                    <p class="small text-muted flex-grow-1">@(c.Description.Length > 100 ? c.Description[..100] + "…" : c.Description)</p>
+                    <a class="btn btn-sm btn-primary" asp-action="Details" asp-route-id="@c.Id">View &amp; enroll</a>
+                </div>
+            </div>
+        </div>
+    }
+</div>

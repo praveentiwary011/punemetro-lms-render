@@ -1,0 +1,31 @@
+@model Message
+@{
+    ViewData["Title"] = Model.Subject;
+}
+<nav class="small mb-3">
+    <a asp-action="Index" class="text-decoration-none"><i class="bi bi-arrow-left me-1"></i>Communication Center</a>
+</nav>
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card p-4 mb-3">
+            <h4>@Model.Subject</h4>
+            <p class="text-muted small mb-3">
+                From <strong>@Model.Sender?.FullName</strong> to <strong>@Model.Recipient?.FullName</strong>
+                · @Model.SentAt.ToString("MMMM d, yyyy HH:mm") UTC
+                @if (Model.ReadAt != null) { <text> · read @Model.ReadAt.Value.ToString("MMM d, HH:mm")</text> }
+            </p>
+            <div style="white-space:pre-wrap">@Model.Body</div>
+        </div>
+        <div class="card p-4">
+            <h6 class="mb-3">Reply to @ViewBag.ReplyToName</h6>
+            <form method="post" asp-action="Send">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="recipientId" value="@ViewBag.ReplyToId" />
+                <input type="hidden" name="isReply" value="true" />
+                <input type="hidden" name="subject" value="RE: @Model.Subject" />
+                <div class="mb-3"><textarea name="body" class="form-control" rows="4" required></textarea></div>
+                <button class="btn btn-primary">Send reply</button>
+            </form>
+        </div>
+    </div>
+</div>

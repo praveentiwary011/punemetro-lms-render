@@ -1,0 +1,123 @@
+@model List<Enrollment>
+@{
+    ViewData["Title"] = "Individual Progress Report";
+    var student = (ApplicationUser)ViewBag.Student;
+    var completedIds = (List<int>)ViewBag.CompletedLessonIds;
+    var students = ViewBag.Students as List<ApplicationUser>;
+    var rows = Model.Select(e =>
+    {
+        var lessons = e.Course!.Modules.SelectMany(m => m.Lessons).ToList();
+        var done = lessons.Count(l => completedIds.Contains(l.Id));
+        var attempts = e.Course.Quizzes.SelectMany(q => q.Attempts)
+            .Where(a => a.StudentId == e.StudentId && a.SubmittedAt != null).ToList();
+        return new
+        {
+            e.Course.Code,
+            e.Course.Title,
+            Progress = lessons.Count == 0 ? 0 : (double)done / lessons.Count * 100,
+            QuizAvg = attempts.Count == 0 ? 0 : attempts.Average(a => a.MaxScore > 0 ? a.Score / a.MaxScore * 100 : 0),
+            Submitted = e.Course.Assignments.Count(a => a.Submissions.Any(s => s.StudentId == e.StudentId)),
+            TotalAssignments = e.Course.Assignments.Count,
+            e.Status, e.FinalGrade
+        };
+    }).ToList();
+}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h2><em class="icon ni ni-user-check me-2"></em>Individual Progress Report</h2>
+    @if (students != null)
+    {
+        <form method="get" class="d-flex gap-2">
+            <select name="studentId" class="form-select">
+                @foreach (var s in students)
+                {
+                    if (s.Id == (string)ViewBag.TargetId) { <option selected value="@s.Id">@s.FullName</option> }
+                    else { <option value="@s.Id">@s.FullName</option> }
+                }
+            </select>
+            <button class="btn btn-outline-primary">Load</button>
+        </form>
+    }
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3"><div class="card p-3 stat-card"><div class="display-6">@Model.Count</div><div class="text-muted">Enrollments</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card p-3 stat-card"><div class="display-6">@Model.Count(e => e.Status == EnrollmentStatus.Completed)</div><div class="text-muted">Completed</div></div></div>
+    <div class="col-6 col-lg-3"><div class="card p-3 stat-card"><div class="display-6">@ViewBag.Certificates</div><div class="text-muted">Certificates</div></div></div>
+    <div class="col-6 col-lg-3">
+        <div class="card p-3 stat-card">
+            <div class="display-6">@(ViewBag.AttendanceTotal == 0 ? "—" : $"{(double)ViewBag.AttendancePresent / ViewBag.AttendanceTotal * 100:0}%")</div>
+            <div class="text-muted">Attendance (@student.Department)</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">@student.FullName — course progress</div>
+            <table class="table align-middle mb-0">
+                <thead><tr><th>Course</th><th>Lessons</th><th>Quiz avg</th><th>Assignments</th><th>Status</th></tr></thead>
+                <tbody>
+                @if (!rows.Any())
+                {
+                    <tr><td colspan="5" class="text-muted">No enrollments.</td></tr>
+                }
+                @foreach (var r in rows)
+                {
+                    <tr>
+                        <td>@r.Code</td>
+                        <td style="min-width:130px">
+                            <div class="progress"><div class="progress-bar" style="width:@(r.Progress.ToString("0"))%"></div></div>
+                            <span class="small text-muted">@r.Progress.ToString("0")%</span>
+                        </td>
+                        <td>@r.QuizAvg.ToString("0.#")%</td>
+                        <td>@r.Submitted / @r.TotalAssignments</td>
+                        <td>
+                            @if (r.Status == EnrollmentStatus.Completed) { <span class="badge text-bg-success">Completed (@r.FinalGrade?.ToString("0.#")%)</span> }
+                            else { <span class="badge text-bg-primary">Active</span> }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card p-3">
+            <h6 class="mb-3">Progress by course</h6>
+            <canvas id="progressChart" height="220"></canvas>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/lib/chart.js/chart.umd.min.js"></script>
+<script src="/lib/chartjs-plugin-datalabels/chartjs-plugin-datalabels.min.js"></script>
+<script nonce="@Context.CspNonce()">
+    Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'DM Sans', sans-serif";
+    Chart.defaults.color = '#8094ae';
+    const rows = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(rows.Select(r => new { code = r.Code, progress = Math.Round(r.Progress), quiz = Math.Round(r.QuizAvg) })));
+    new Chart(document.getElementById('progressChart'), {
+        type: 'bar',
+        data: {
+            labels: rows.map(r => r.code),
+            datasets: [
+                { label: 'Lesson progress %', data: rows.map(r => r.progress), backgroundColor: 'rgba(101,118,255,.9)', borderRadius: 6, maxBarThickness: 26 },
+                { label: 'Quiz avg %', data: rows.map(r => r.quiz), backgroundColor: 'rgba(30,224,172,.9)', borderRadius: 6, maxBarThickness: 26 }
+            ]
+        },
+        options: {
+            layout: { padding: { top: 28 } },
+            scales: {
+                x: { grid: { display: false }, border: { display: false } },
+                y: { grid: { display: false }, border: { display: false }, beginAtZero: true, max: 100 }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 16 } },
+                datalabels: { color: '#526484', font: { weight: 600, size: 10 }, anchor: 'end', align: 'top', clamp: true }
+            }
+        }
+    });
+</script>
+}

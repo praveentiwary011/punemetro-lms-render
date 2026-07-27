@@ -1,0 +1,77 @@
+@model List<Enrollment>
+@{
+    ViewData["Title"] = "Enrollments";
+    var courses = (List<Course>)ViewBag.Courses;
+    var students = (IList<ApplicationUser>)ViewBag.Students;
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-person-check me-2"></i>Enrollments</h2>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <form method="get" class="d-flex gap-2">
+            <select name="courseId" class="form-select">
+                <option value="">All courses</option>
+                @foreach (var c in courses)
+                {
+                    if (ViewBag.CourseId == c.Id) { <option selected value="@c.Id">@c.Title</option> }
+                    else { <option value="@c.Id">@c.Title</option> }
+                }
+            </select>
+            <button class="btn btn-outline-primary">Filter</button>
+        </form>
+    </div>
+    <div class="col-lg-6">
+        <form method="post" asp-action="EnrollStudent" class="d-flex gap-2">
+            @Html.AntiForgeryToken()
+            <select name="courseId" class="form-select" required>
+                <option value="">Enroll in course…</option>
+                @foreach (var c in courses)
+                {
+                    <option value="@c.Id">@c.Title</option>
+                }
+            </select>
+            <select name="studentId" class="form-select" required>
+                <option value="">Select student…</option>
+                @foreach (var s in students)
+                {
+                    <option value="@s.Id">@s.FullName</option>
+                }
+            </select>
+            <button class="btn btn-primary text-nowrap">Enroll</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Student</th><th>Course</th><th>Enrolled</th><th>Status</th><th>Final grade</th><th class="text-end"></th></tr></thead>
+        <tbody>
+        @foreach (var e in Model)
+        {
+            <tr>
+                <td>@e.Student?.FullName</td>
+                <td>@e.Course?.Title</td>
+                <td>@e.EnrolledAt.ToString("MMM d, yyyy")</td>
+                <td>
+                    @switch (e.Status)
+                    {
+                        case EnrollmentStatus.Completed: <span class="badge text-bg-success">Completed</span>; break;
+                        case EnrollmentStatus.Dropped: <span class="badge text-bg-secondary">Dropped</span>; break;
+                        default: <span class="badge text-bg-primary">Active</span>; break;
+                    }
+                </td>
+                <td>@(e.FinalGrade?.ToString("0.#") ?? "—")</td>
+                <td class="text-end">
+                    <form method="post" asp-action="RemoveEnrollment" data-confirm="Remove this enrollment?">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@e.Id" />
+                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,65 @@
+@model List<DepartmentMetricsRow>
+@{
+    ViewData["Title"] = "Departmental Performance";
+}
+<h2 class="mb-4"><em class="icon ni ni-building me-2"></em>Departmental Performance Metrics</h2>
+
+<div class="card mb-4 p-3">
+    <canvas id="deptChart" height="90"></canvas>
+</div>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Department</th><th>Staff in training</th><th>Enrollments</th><th>Completed</th><th>Avg quiz score</th><th>Certificates</th></tr></thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="6" class="text-muted">No training data yet.</td></tr>
+        }
+        @foreach (var r in Model)
+        {
+            <tr>
+                <td class="fw-semibold">@r.Department</td>
+                <td>@r.Staff</td>
+                <td>@r.Enrollments</td>
+                <td>@r.Completed</td>
+                <td>@r.AvgQuizScore.ToString("0.#")%</td>
+                <td>@r.Certificates</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+<script src="/lib/chart.js/chart.umd.min.js"></script>
+<script src="/lib/chartjs-plugin-datalabels/chartjs-plugin-datalabels.min.js"></script>
+<script nonce="@Context.CspNonce()">
+    Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'DM Sans', sans-serif";
+    Chart.defaults.color = '#8094ae';
+    const rows = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Select(r => new { dept = r.Department, enrollments = r.Enrollments, completed = r.Completed, quiz = Math.Round(r.AvgQuizScore, 1) })));
+    new Chart(document.getElementById('deptChart'), {
+        type: 'bar',
+        data: {
+            labels: rows.map(r => r.dept),
+            datasets: [
+                { label: 'Enrollments', data: rows.map(r => r.enrollments), backgroundColor: 'rgba(101,118,255,.9)', borderRadius: 6, maxBarThickness: 30 },
+                { label: 'Completed', data: rows.map(r => r.completed), backgroundColor: 'rgba(30,224,172,.9)', borderRadius: 6, maxBarThickness: 30 },
+                { label: 'Avg quiz %', data: rows.map(r => r.quiz), backgroundColor: 'rgba(244,189,14,.9)', borderRadius: 6, maxBarThickness: 30 }
+            ]
+        },
+        options: {
+            layout: { padding: { top: 28 } },
+            scales: {
+                x: { grid: { display: false }, border: { display: false } },
+                y: { grid: { display: false }, border: { display: false }, beginAtZero: true }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 16 } },
+                datalabels: { color: '#526484', font: { weight: 600, size: 10 }, anchor: 'end', align: 'top', clamp: true }
+            }
+        }
+    });
+</script>
+}

@@ -1,0 +1,83 @@
+@model Course
+@{
+    ViewData["Title"] = "New course";
+    var categories = (List<Category>)ViewBag.Categories;
+}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <h3 class="mb-4">Create a course</h3>
+        <div class="card p-4">
+            <form method="post" asp-action="CreateCourse" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="mb-3"><label class="form-label">Title</label><input name="Title" class="form-control" required /></div>
+                <div class="row">
+                    <div class="col-6 mb-3"><label class="form-label">Code</label><input name="Code" class="form-control" placeholder="e.g. CS101" /></div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label">Category</label>
+                        <select name="CategoryId" class="form-select">
+                            <option value="">None</option>
+                            @foreach (var c in categories)
+                            {
+                                <option value="@c.Id">@c.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3"><label class="form-label">Description</label><textarea name="Description" class="form-control" rows="4"></textarea></div>
+                <div class="row">
+                    <div class="col-4 mb-3"><label class="form-label">Max enrollment</label><input name="MaxEnrollment" type="number" value="100" class="form-control" /></div>
+                    <div class="col-4 mb-3"><label class="form-label">Start date</label><input name="StartDate" type="date" class="form-control" /></div>
+                    <div class="col-4 mb-3"><label class="form-label">End date</label><input name="EndDate" type="date" class="form-control" /></div>
+                </div>
+                <div class="row">
+                    <div class="col-6 mb-3"><label class="form-label">Passing grade %</label><input name="PassingGrade" type="number" value="60" class="form-control" /></div>
+                    <div class="col-6 mb-3 d-flex align-items-end">
+                        <div class="form-check">
+                            <input name="IssuesCertificate" type="checkbox" value="true" checked class="form-check-input" id="cert" />
+                            <label class="form-check-label" for="cert">Issue certificate on completion</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-check mb-3">
+                    <input name="RequiresAssessment" type="checkbox" value="true" class="form-check-input" id="reqAssess" />
+                    <label class="form-check-label" for="reqAssess">Require passing the quiz/assessment to complete</label>
+                    <div class="form-text">When ticked, a trainee's course is marked complete (and any certificate issued) only after they finish all lessons <strong>and</strong> pass the course's quiz/assignment.</div>
+                </div>
+                <hr class="my-4" />
+                <h6 class="mb-1">Training material <span class="text-muted fw-normal">(optional)</span></h6>
+                <p class="text-muted small mb-3">Attach the first learning material now — a PDF document or a video. More can be added in the course builder.</p>
+                <div class="mb-3">
+                    <label class="form-label">Material title</label>
+                    <input name="materialTitle" class="form-control" placeholder="e.g. Course Handbook / Introduction Video" />
+                </div>
+                <div class="row">
+                    <div class="col-4 mb-3">
+                        <label class="form-label">Type</label>
+                        <select name="materialType" id="materialType" class="form-select">
+                            <option value="PDF">PDF document</option>
+                            <option value="Video">Video</option>
+                        </select>
+                    </div>
+                    <div class="col-8 mb-3" id="materialFileWrap">
+                        <label class="form-label">PDF or image file <span class="text-muted fw-normal">(images auto-convert to PDF)</span></label>
+                        <input name="materialFile" type="file" accept=".pdf,application/pdf,image/*" class="form-control" />
+                    </div>
+                    <div class="col-8 mb-3 d-none" id="materialUrlWrap">
+                        <label class="form-label">Video URL (YouTube embed or direct link)</label>
+                        <input name="materialUrl" class="form-control" placeholder="https://www.youtube.com/embed/…" />
+                    </div>
+                </div>
+                <button class="btn btn-primary">Create &amp; continue building <em class="icon ni ni-arrow-right ms-1"></em></button>
+                <div class="text-muted small mt-2">Next step: the course builder opens, where you add modules, lessons, quizzes and assignments, then publish.</div>
+            </form>
+            <script nonce="@Context.CspNonce()">
+                document.getElementById('materialType').addEventListener('change', toggleMaterial);
+                function toggleMaterial() {
+                    var isVideo = document.getElementById('materialType').value === 'Video';
+                    document.getElementById('materialFileWrap').classList.toggle('d-none', isVideo);
+                    document.getElementById('materialUrlWrap').classList.toggle('d-none', !isVideo);
+                }
+            </script>
+        </div>
+    </div>
+</div>

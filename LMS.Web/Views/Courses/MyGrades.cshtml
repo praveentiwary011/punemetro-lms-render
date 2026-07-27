@@ -1,0 +1,68 @@
+@model List<Enrollment>
+@{
+    ViewData["Title"] = "My grades";
+}
+<h2 class="mb-4"><i class="bi bi-mortarboard me-2"></i>My grades</h2>
+
+@foreach (var e in Model)
+{
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between">
+            <span>@e.Course!.Code — @e.Course.Title</span>
+            <span>
+                @if (e.FinalGrade != null)
+                {
+                    <span class="badge @(e.FinalGrade >= e.Course.PassingGrade ? "text-bg-success" : "text-bg-danger")">Final: @e.FinalGrade.Value.ToString("0.#")%</span>
+                }
+                else { <span class="badge text-bg-secondary">In progress</span> }
+            </span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table mb-0 align-middle" style="table-layout:fixed">
+                <thead>
+                    <tr>
+                        <th style="width:38%">Item</th>
+                        <th style="width:14%">Type</th>
+                        <th style="width:16%">Score</th>
+                        <th style="width:32%">Feedback / status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var a in e.Course.Assignments)
+                {
+                    var sub = a.Submissions.FirstOrDefault(s => s.StudentId == e.StudentId);
+                    <tr>
+                        <td><a asp-controller="Assignments" asp-action="Details" asp-route-id="@a.Id" class="text-decoration-none">@a.Title</a></td>
+                        <td><span class="badge text-bg-light">Assignment</span></td>
+                        <td>@(sub?.Grade != null ? $"{sub.Grade.Value:0.#} / {a.MaxPoints:0.#}" : "—")</td>
+                        <td class="text-muted small">
+                            @if (sub == null) { <text>Not submitted</text> }
+                            else if (sub.Grade == null) { <text>Submitted, awaiting grade</text> }
+                            else { @sub.Feedback }
+                        </td>
+                    </tr>
+                }
+                @foreach (var q in e.Course.Quizzes)
+                {
+                    var best = q.Attempts.Where(x => x.StudentId == e.StudentId && x.SubmittedAt != null)
+                                         .Select(x => x.MaxScore > 0 ? x.Score / x.MaxScore * 100 : 0)
+                                         .DefaultIfEmpty(-1).Max();
+                    <tr>
+                        <td><a asp-controller="Quizzes" asp-action="MyResult" asp-route-id="@q.Id" class="text-decoration-none">@q.Title</a></td>
+                        <td><span class="badge text-bg-light">Quiz</span></td>
+                        <td>@(best < 0 ? "—" : $"{best:0.#}%")</td>
+                        <td class="text-muted small">
+                            @if (best < 0) { <text>Not attempted</text> }
+                            else { <text>@(best >= q.PassingScore ? "Passed" : "Below passing score") (pass: @q.PassingScore%)</text> }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+@if (!Model.Any())
+{
+    <p class="text-muted">You aren't enrolled in any courses yet.</p>
+}

@@ -1,0 +1,111 @@
+@model List<DocumentItem>
+@inject MediaTokenService MediaTokens
+@{
+    ViewData["Title"] = "Document Library";
+    bool canManage = ViewBag.CanManage;
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><em class="icon ni ni-folder-fill me-2"></em>Document Library</h2>
+    @if (canManage)
+    {
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newDocModal"><em class="icon ni ni-upload me-1"></em>Add document</button>
+    }
+</div>
+
+<div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+    <a class="btn btn-sm @(ViewBag.Category == null ? "btn-primary" : "btn-outline-primary")" asp-action="Documents" asp-route-q="@ViewBag.Query">All</a>
+    @foreach (DocumentCategory cat in Enum.GetValues<DocumentCategory>())
+    {
+        <a class="btn btn-sm @(ViewBag.Category == cat ? "btn-primary" : "btn-outline-primary")" asp-action="Documents" asp-route-category="@cat" asp-route-q="@ViewBag.Query">@(cat == DocumentCategory.Policy ? "Policies" : cat == DocumentCategory.Procedure ? "Procedures" : cat == DocumentCategory.Manual ? "Manuals" : "Other")</a>
+    }
+    <form method="get" class="d-flex gap-2 ms-auto">
+        @if (ViewBag.Category != null)
+        {
+            <input type="hidden" name="category" value="@ViewBag.Category" />
+        }
+        <input name="q" value="@ViewBag.Query" class="form-control form-control-sm" placeholder="Search documents…" style="min-width:220px" />
+        <button class="btn btn-sm btn-outline-primary">Search</button>
+        @if (!string.IsNullOrEmpty((string?)ViewBag.Query))
+        {
+            <a class="btn btn-sm btn-outline-light" asp-action="Documents" asp-route-category="@ViewBag.Category">Clear</a>
+        }
+    </form>
+</div>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Document</th><th>Category</th><th>Added</th><th>By</th><th class="text-end"></th></tr></thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="5" class="text-muted">No documents in this category yet.</td></tr>
+        }
+        @foreach (var d in Model)
+        {
+            var hosted = d.Url.StartsWith("/uploads/", StringComparison.Ordinal);   // our uploaded file
+            var isAdmin = User.IsInRole("Admin");
+            // Hosted files open through the gated MediaController with a short-lived,
+            // user-bound access token (inline view only); non-Admins also get the browser
+            // PDF toolbar hidden. External links open as-is.
+            var docTok = hosted ? MediaTokens.Issue(User.GetUserId(), MediaTokenService.DocumentKind, d.Id, TimeSpan.FromHours(8)) : null;
+            var viewUrl = hosted
+                ? Url.Action("Document", "Media", new { id = d.Id, t = docTok }) + (isAdmin ? "" : "#toolbar=0&navpanes=0")
+                : d.Url;
+            <tr>
+                <td>
+                    <a href="@viewUrl" target="_blank" class="fw-semibold text-decoration-none"><em class="icon ni ni-file-pdf me-1"></em>@d.Title</a>
+                    @if (!string.IsNullOrEmpty(d.Description)) { <div class="small text-muted">@d.Description</div> }
+                </td>
+                <td><span class="badge text-bg-light">@d.Category</span></td>
+                <td class="small">@d.UploadedAt.ToString("MMM d, yyyy")</td>
+                <td class="small">@d.UploadedBy?.FullName</td>
+                <td class="text-end">
+                    <div class="d-inline-flex gap-1">
+                        @if (hosted && isAdmin)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary" href="@Url.Action("DownloadDocument", "Media", new { id = d.Id, t = docTok })" title="Download"><em class="icon ni ni-download"></em></a>
+                        }
+                        @if (canManage)
+                        {
+                            <form method="post" asp-action="DeleteDocument" data-confirm="Remove this document?">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@d.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><em class="icon ni ni-trash"></em></button>
+                            </form>
+                        }
+                    </div>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@if (canManage)
+{
+    <div class="modal fade" id="newDocModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" asp-action="AddDocument" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header"><h5 class="modal-title">Add document</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="mb-2"><input name="title" class="form-control" placeholder="Title" required /></div>
+                        <div class="mb-2">
+                            <select name="category" class="form-select">
+                                <option value="0">Policy</option><option value="1">Procedure</option><option value="2">Manual</option><option value="3">Other</option>
+                            </select>
+                        </div>
+                        <div class="mb-2"><input name="description" class="form-control" placeholder="Short description" /></div>
+                        <div class="mb-2"><input name="url" class="form-control" placeholder="Link (or attach a file below)" /></div>
+                        <div class="mb-2"><input name="file" type="file" class="form-control" /></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary">Add</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}

@@ -1,0 +1,45 @@
+@using LMS.Web.Services.Setup
+@model SetupWizardState
+@{
+    Layout = "_Wizard";
+    ViewData["Title"] = "Organisation";
+}
+<h1>Your organisation</h1>
+<p class="sub">The company this LMS is being installed for. It becomes the first tenant — its users, courses and certificates belong to it.</p>
+
+<form method="post" asp-action="SaveOrganisation">
+    @Html.AntiForgeryToken()
+    <div class="row">
+        <div class="fld full">
+            <label class="lbl">Organisation name *</label>
+            <input type="text" name="orgName" value="@Model.OrgName" required placeholder="e.g. Pune Metro Rail Corporation" />
+        </div>
+        <div class="fld">
+            <label class="lbl">Short code *</label>
+            <input type="text" name="orgCode" value="@Model.OrgCode" required maxlength="20" placeholder="e.g. PUNEMETRO" style="text-transform:uppercase" />
+            <div class="hint">A unique identifier for this tenant. Letters and digits only.</div>
+        </div>
+        <div class="fld">
+            <label class="lbl">Site name shown in the app</label>
+            <input type="text" name="siteName" value="@Model.SiteName" placeholder="Defaults to the organisation name" />
+        </div>
+        <div class="fld">
+            <label class="lbl">Contact email</label>
+            <input type="email" name="contactEmail" value="@Model.OrgContactEmail" />
+        </div>
+        <div class="fld">
+            <label class="lbl">Contact phone</label>
+            <input type="text" name="contactPhone" value="@Model.OrgContactPhone" />
+        </div>
+        <div class="fld full">
+            <label class="lbl">Address</label>
+            <textarea name="address" rows="2">@Model.OrgAddress</textarea>
+        </div>
+    </div>
+    <p class="hint">You can add a company logo, venues and more organisations later from Administration.</p>
+
+    <div class="actions">
+        <a class="back" asp-action="Database">← Back</a>
+        <button type="submit" class="btn btn-primary">Continue</button>
+    </div>
+</form>

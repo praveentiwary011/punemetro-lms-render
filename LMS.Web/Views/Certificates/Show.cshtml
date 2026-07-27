@@ -1,0 +1,87 @@
+@model Certificate
+@{
+    ViewData["Title"] = "Certificate";
+    var verifyUrl = $"{Context.Request.Scheme}://{Context.Request.Host}{Url.Action("Verify", "Certificates", new { id = Model.SerialNumber })}";
+    bool isPublic = ViewBag.IsPublicVerify == true;
+    var issuer = Model.Enrollment?.Course?.Organisation?.Name ?? "the training institute";
+    var instructor = Model.Enrollment?.Course?.Instructor;
+    var signatory = Model.Enrollment?.Course?.Organisation?.CertificateSignatory;
+    // Uploaded signatures when available; placeholder signatures until then
+    var instructorSig = instructor?.SignatureUrl ?? "/images/signatures/sig-placeholder-1.png";
+    var directorSig = signatory?.SignatureUrl ?? "/images/signatures/sig-placeholder-2.png";
+    var directorName = signatory?.FullName ?? issuer;
+    var issuerLogo = Model.Enrollment?.Course?.Organisation?.LogoUrl;
+    if (string.IsNullOrEmpty(issuerLogo)) { issuerLogo = "/images/logo_new.png"; }
+    var grade = Model.Enrollment?.FinalGrade;
+    var letter = grade == null ? "—"
+        : grade >= 90 ? "A+"
+        : grade >= 80 ? "A"
+        : grade >= 70 ? "B+"
+        : grade >= 60 ? "B"
+        : "C";
+}
+<div class="d-flex justify-content-between align-items-center mb-3 no-print" style="max-width:980px;margin:0 auto">
+    @if (isPublic)
+    {
+        <span class="badge text-bg-success"><em class="icon ni ni-shield-check me-1"></em>Verified authentic — issued by @issuer</span>
+    }
+    else
+    {
+        <span></span>
+    }
+    <button class="btn btn-primary" data-action="print"><em class="icon ni ni-printer me-1"></em>Print / Save as PDF</button>
+</div>
+
+<div class="certificate-frame">
+    <img src="@issuerLogo" alt="@issuer" class="cert-logo" />
+
+    <h1 class="cert-heading">CERTIFICATE OF COMPLETION</h1>
+    <hr class="cert-divider" />
+
+    <p class="cert-muted mt-5 mb-2">This is to certify that</p>
+    <div class="cert-name">@Model.Enrollment?.Student?.FullName</div>
+    <p class="cert-muted mt-3 mb-2">has successfully completed the course</p>
+    <div class="cert-course">@Model.Enrollment?.Course?.Title</div>
+
+    <p class="cert-muted mt-4 mb-1">with a grade of <span class="cert-grade">@letter</span></p>
+    <p class="cert-muted mt-3">Dated: @Model.IssuedAt.ToString("dd MMM, yyyy")</p>
+
+    <hr class="cert-divider mt-5" />
+
+    <div class="d-flex justify-content-between cert-signatures">
+        <div class="text-center">
+            <img class="cert-sign-img" src="@instructorSig" alt="Signature — @instructor?.FullName" />
+            <div class="cert-signline"></div>
+            <div class="cert-muted">Course Instructor</div>
+            <div class="small text-muted">@instructor?.FullName</div>
+        </div>
+        <div class="text-center">
+            <img class="cert-sign-img" src="@directorSig" alt="Signature — @directorName" />
+            <div class="cert-signline"></div>
+            <div class="cert-muted">Training Director</div>
+            <div class="small text-muted">@directorName</div>
+        </div>
+    </div>
+
+    <div class="cert-qr-row">
+        <div class="cert-qr">
+            <div id="certQr"></div>
+            <div class="cert-qr-caption">Scan to verify</div>
+        </div>
+        <div class="cert-id">Certificate ID: @Model.SerialNumber</div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="/lib/qrcodejs/qrcode.min.js"></script>
+<script nonce="@Context.CspNonce()">
+    new QRCode(document.getElementById('certQr'), {
+        text: '@verifyUrl',
+        width: 96,
+        height: 96,
+        colorDark: '#364a63',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+    });
+</script>
+}

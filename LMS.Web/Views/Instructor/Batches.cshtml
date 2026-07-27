@@ -1,0 +1,150 @@
+@model List<TrainingBatch>
+@{
+    ViewData["Title"] = "Batch Set-up";
+    var courses = (List<Course>)ViewBag.Courses;
+    var orgLocations = (List<TrainingLocation>)ViewBag.Locations;
+    TrainingBatch? edit = ViewBag.Edit;
+    var isStaffWide = User.IsInRole("Admin") || User.IsInRole("Principal");
+    var today = DateTime.UtcNow.Date;
+
+    (string Label, string Css) StatusOf(TrainingBatch b) =>
+        b.StartDate > today ? ("Upcoming", "text-bg-info")
+        : b.EndDate < today ? ("Completed", "text-bg-secondary")
+        : ("Ongoing", "text-bg-success");
+}
+
+<div class="card p-4 mx-auto mb-4" style="max-width:820px">
+    <h3 class="mb-4">@(edit == null ? "Create New Batch" : "Edit Batch")</h3>
+    <form method="post" asp-action="SaveBatch">
+        @Html.AntiForgeryToken()
+        @if (edit != null) { <input type="hidden" name="id" value="@edit.Id" /> }
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Batch Name <span class="text-danger">*</span></label>
+                <input name="name" class="form-control" required maxlength="200" value="@edit?.Name" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Select Course/Training <span class="text-danger">*</span></label>
+                <select name="courseId" class="form-select" required>
+                    <option value="">-- Select Course --</option>
+                    @foreach (var c in courses)
+                    {
+                        <option value="@c.Id" selected="@(edit?.CourseId == c.Id)">@c.Code — @c.Title</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Start Date <span class="text-danger">*</span></label>
+                <input name="startDate" type="date" class="form-control" required value="@edit?.StartDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">End Date <span class="text-danger">*</span></label>
+                <input name="endDate" type="date" class="form-control" required value="@edit?.EndDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Max Trainee Intake <span class="text-danger">*</span></label>
+                <input name="maxIntake" type="number" class="form-control" required min="1" max="1000" value="@(edit?.MaxIntake > 0 ? edit!.MaxIntake.ToString() : "")" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Training Location</label>
+                <input name="location" class="form-control" maxlength="200" list="locationOptions" placeholder="e.g. Range Hills Training Centre" value="@edit?.Location" />
+                <datalist id="locationOptions">
+                    @foreach (var name in orgLocations.Select(l => l.Name).Distinct())
+                    {
+                        <option value="@name"></option>
+                    }
+                </datalist>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Training Room Details</label>
+                <input name="room" class="form-control" maxlength="200" list="roomOptions" placeholder="e.g. Room 2 · projector · 30 seats" value="@edit?.Room" />
+                <datalist id="roomOptions">
+                    @foreach (var room in orgLocations.Where(l => !string.IsNullOrEmpty(l.Room)).Select(l => l.Room!).Distinct())
+                    {
+                        <option value="@room"></option>
+                    }
+                </datalist>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Batch Description</label>
+                <textarea name="description" class="form-control" rows="4" maxlength="1000" placeholder="(Optional)">@edit?.Description</textarea>
+            </div>
+            <div class="col-12 d-flex justify-content-end gap-2">
+                @if (edit != null)
+                {
+                    <a class="btn btn-outline-secondary" asp-action="Batches">Cancel</a>
+                }
+                <button class="btn btn-primary">@(edit == null ? "Create Batch" : "Save Changes")</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>@(isStaffWide ? "All Batches" : "My Batches")</span>
+        <span class="text-muted small">@Model.Count batch@(Model.Count == 1 ? "" : "es")</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>Batch Name</th>
+                    <th>Course Name</th>
+                    @if (isStaffWide) { <th>Created By</th> }
+                    <th>Intake</th>
+                    <th>Location / Room</th>
+                    <th>Start Date – End Date</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="@(isStaffWide ? 8 : 7)" class="text-muted">No batches yet — create the first one above.</td></tr>
+                }
+                @foreach (var b in Model)
+                {
+                    var (label, css) = StatusOf(b);
+                    <tr>
+                        <td>
+                            <strong>@b.Name</strong>
+                            @if (!string.IsNullOrEmpty(b.Description))
+                            {
+                                <div class="small text-muted text-truncate" style="max-width:260px" title="@b.Description">@b.Description</div>
+                            }
+                        </td>
+                        <td><strong>@b.Course?.Code</strong><div class="small text-muted text-truncate" style="max-width:220px">@b.Course?.Title</div></td>
+                        @if (isStaffWide) { <td>@b.CreatedBy?.FullName</td> }
+                        <td>@b.MaxIntake</td>
+                        <td>
+                            @if (string.IsNullOrEmpty(b.Location) && string.IsNullOrEmpty(b.Room))
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                            else
+                            {
+                                @b.Location
+                                @if (!string.IsNullOrEmpty(b.Room))
+                                {
+                                    <div class="small text-muted">@b.Room</div>
+                                }
+                            }
+                        </td>
+                        <td class="text-nowrap">@b.StartDate.ToString("dd MMM yyyy") – @b.EndDate.ToString("dd MMM yyyy")</td>
+                        <td><span class="badge @css">@label</span></td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary" asp-action="Batches" asp-route-editId="@b.Id">Edit</a>
+                            <form method="post" asp-action="DeleteBatch" class="d-inline" data-confirm="Delete batch “@b.Name”?">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@b.Id" />
+                                <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

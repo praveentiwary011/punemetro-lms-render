@@ -1,0 +1,647 @@
+@inject LMS.Web.Data.AppDbContext Db
+@inject Microsoft.Extensions.Caching.Memory.IMemoryCache Cache
+@using LMS.Web.Services
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Caching.Memory
+@{
+    var isAuth = User.Identity?.IsAuthenticated == true;
+    int unreadNotifications = 0;
+    int unreadMessages = 0;
+    var fullName = "";
+    // Tenant branding: after sign-in the brand is the user's organisation — its
+    // logo and name everywhere; the neutral platform brand otherwise.
+    var brandLogo = "/images/logo_lms.png";
+    var orgName = "";
+    if (isAuth)
+    {
+        var uid = User.GetUserId();
+        unreadNotifications = await Db.Notifications.CountAsync(n => n.UserId == uid && n.ReadAt == null);
+        unreadMessages = await Db.Messages.CountAsync(m => m.RecipientId == uid && m.ReadAt == null);
+        var me = await Db.Users.Where(u => u.Id == uid)
+            .Select(u => new { u.FullName, OrgLogo = u.Organisation!.LogoUrl, OrgName = u.Organisation!.Name })
+            .FirstOrDefaultAsync();
+        fullName = me?.FullName ?? "";
+        if (string.IsNullOrWhiteSpace(fullName)) { fullName = User.Identity?.Name ?? ""; }
+        if (!string.IsNullOrEmpty(me?.OrgLogo)) { brandLogo = me.OrgLogo; }
+        orgName = me?.OrgName ?? "";
+    }
+    var initials = string.Concat(fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Where(w => char.IsLetter(w[0]) && !w.EndsWith(".")) // skip honorifics like "Dr."
+        .Take(2).Select(w => char.ToUpper(w[0])));
+    if (initials.Length == 0) { initials = "U"; }
+    // Site name changes rarely — cache it instead of querying on every request
+    var siteName = await Cache.GetOrCreateAsync("SiteName", async entry =>
+    {
+        entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+        return (await Db.SiteSettings.FindAsync("SiteName"))?.Value ?? "LMS";
+    }) ?? "LMS";
+    var activeRole = isAuth ? ActiveRole.Get(Context) : "";
+    var myRoles = isAuth ? ActiveRole.RolesOf(User) : new List<string>();
+    var currentController = (string?)ViewContext.RouteData.Values["controller"] ?? "";
+    var currentAction = (string?)ViewContext.RouteData.Values["action"] ?? "";
+
+    // A menu link may be distinguished from a sibling only by a route/query value
+    // (e.g. My Courses ?status=ongoing vs ?status=completed), so an optional
+    // key/value pair can be compared as well as controller + action.
+    string RouteOrQuery(string key)
+    {
+        var v = Context.Request.Query[key].ToString();
+        if (string.IsNullOrEmpty(v) && ViewContext.RouteData.Values.TryGetValue(key, out var rv))
+            v = rv?.ToString() ?? "";
+        return v;
+    }
+
+    string Active(string controller, string? action = null, string? key = null, string? value = null) =>
+        string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase) &&
+        (action == null || string.Equals(currentAction, action, StringComparison.OrdinalIgnoreCase)) &&
+        (key == null || string.Equals(RouteOrQuery(key), value, StringComparison.OrdinalIgnoreCase))
+            ? "active current-page" : "";
+
+    // True when ANY of the given "Controller/Action" (optionally "…?key=value")
+    // targets is the current page — used to open and highlight the parent of a
+    // submenu on the server, so the sidebar is already correct at first paint
+    // instead of being corrected by script after the page has been drawn.
+    string Any(params string[] specs)
+    {
+        foreach (var spec in specs)
+        {
+            var parts = spec.Split('?');
+            var ca = parts[0].Split('/');
+            string? key = null, value = null;
+            if (parts.Length > 1)
+            {
+                var kv = parts[1].Split('=');
+                key = kv[0];
+                value = kv.Length > 1 ? kv[1] : "";
+            }
+            if (Active(ca[0], ca.Length > 1 ? ca[1] : null, key, value) != "") return "active current-page";
+        }
+        return "";
+    }
+}
+<!DOCTYPE html>
+<html lang="en" class="js">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>@(ViewData["Title"] != null ? ViewData["Title"] + " | " : "")@(string.IsNullOrEmpty(orgName) ? siteName : orgName)</title>
+    <link rel="stylesheet" href="~/assets/css/dashlite.css" asp-append-version="true" />
+    <link id="skin-default" rel="stylesheet" href="~/assets/css/theme.css" asp-append-version="true" />
+    <link href="~/lib/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
+</head>
+<body class="nk-body bg-lighter npc-general @(isAuth ? "has-sidebar" : "") no-touch nk-nio-theme">
+<div class="nk-app-root">
+    <div class="nk-main">
+        @if (isAuth)
+        {
+            <div class="nk-sidebar nk-sidebar-fixed is-light" data-content="sidebarMenu">
+                <div class="nk-sidebar-element nk-sidebar-head">
+                    <div class="nk-sidebar-brand">
+                        <a asp-controller="Home" asp-action="Index" class="logo-link nk-sidebar-logo">
+                            <img class="logo-light logo-img" src="@brandLogo" alt="logo" />
+                            <img class="logo-dark logo-img" src="@brandLogo" alt="logo-dark" />
+                            <img class="logo-small logo-img logo-img-small" src="@brandLogo" alt="logo-small" />
+                        </a>
+                    </div>
+                    <div class="nk-menu-trigger me-n2">
+                        <a href="#" class="nk-nav-toggle nk-quick-nav-icon d-xl-none" data-target="sidebarMenu"><em class="icon ni ni-arrow-left"></em></a>
+                        <a href="#" class="nk-nav-compact nk-quick-nav-icon d-none d-xl-inline-flex" data-target="sidebarMenu"><em class="icon ni ni-menu"></em></a>
+                    </div>
+                </div>
+                <div class="nk-sidebar-element">
+                    <div class="nk-sidebar-content">
+                        <div class="nk-sidebar-menu" data-simplebar>
+                            <ul class="nk-menu">
+                                @if (activeRole == "Admin" || activeRole == "SuperUser")
+                                {
+                                    <li class="nk-menu-heading"><h6 class="overline-title text-primary-alt">Administration</h6></li>
+                                    <li class="nk-menu-item @Active("Admin", "Dashboard")"><a asp-controller="Admin" asp-action="Dashboard" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-dashboard-fill"></em></span><span class="nk-menu-text">Dashboard</span></a></li>
+                                    <li class="nk-menu-item @Active("Admin", "Users")"><a asp-controller="Admin" asp-action="Users" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-users-fill"></em></span><span class="nk-menu-text">Users</span></a></li>
+                                    @if (User.IsInRole("SuperUser"))
+                                    {
+                                        <li class="nk-menu-item @Active("Admin", "Organisations") @Active("Admin", "Organisation")"><a asp-controller="Admin" asp-action="Organisations" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-building-fill"></em></span><span class="nk-menu-text">Organisations</span></a></li>
+                                    }
+                                    <li class="nk-menu-item @Active("Admin", "OrgRoles")"><a asp-controller="Admin" asp-action="OrgRoles" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-shield-star-fill"></em></span><span class="nk-menu-text">Organisation Roles</span></a></li>
+                                    var g1 = Any("Admin/Courses", "Instructor/CreateCourse", "Instructor/Batches", "Admin/Enrollments", "Admin/Announcements");
+                                    <li class="nk-menu-item has-sub @g1">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-book-fill"></em></span><span class="nk-menu-text">Training Programs</span></a>
+                                        <ul class="nk-menu-sub" style="@(g1 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Admin", "Courses")"><a asp-controller="Admin" asp-action="Courses" class="nk-menu-link"><span class="nk-menu-text">Manage Courses</span></a></li>
+                                            <li class="nk-menu-item @Active("Instructor", "CreateCourse")"><a asp-controller="Instructor" asp-action="CreateCourse" class="nk-menu-link"><span class="nk-menu-text">New Course</span></a></li>
+                                            <li class="nk-menu-item @Active("Instructor", "Batches")"><a asp-controller="Instructor" asp-action="Batches" class="nk-menu-link"><span class="nk-menu-text">Batch Set-up</span></a></li>
+                                            <li class="nk-menu-item @Active("Admin", "Enrollments")"><a asp-controller="Admin" asp-action="Enrollments" class="nk-menu-link"><span class="nk-menu-text">Enrollments &amp; History</span></a></li>
+                                            <li class="nk-menu-item @Active("Admin", "Announcements")"><a asp-controller="Admin" asp-action="Announcements" class="nk-menu-link"><span class="nk-menu-text">Recent Announcements</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g2 = Any("Training/Sessions", "Calendar/Index");
+                                    <li class="nk-menu-item has-sub @g2">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-calendar-booking-fill"></em></span><span class="nk-menu-text">Training Calendar</span></a>
+                                        <ul class="nk-menu-sub" style="@(g2 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Training", "Sessions")"><a asp-controller="Training" asp-action="Sessions" class="nk-menu-link"><span class="nk-menu-text">Upcoming Sessions (Online/Offline)</span></a></li>
+                                            <li class="nk-menu-item @Active("Calendar", "Index")"><a asp-controller="Calendar" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Event Reminders</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g3 = Any("Knowledge/Documents", "Knowledge/Videos", "Knowledge/Faqs");
+                                    <li class="nk-menu-item has-sub @g3">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-folder-fill"></em></span><span class="nk-menu-text">Knowledge Hub</span></a>
+                                        <ul class="nk-menu-sub" style="@(g3 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Knowledge", "Documents")"><a asp-controller="Knowledge" asp-action="Documents" class="nk-menu-link"><span class="nk-menu-text">Document Library</span></a></li>
+                                            <li class="nk-menu-item @Active("Knowledge", "Videos")"><a asp-controller="Knowledge" asp-action="Videos" class="nk-menu-link"><span class="nk-menu-text">Videos &amp; Tutorials</span></a></li>
+                                            <li class="nk-menu-item @Active("Knowledge", "Faqs")"><a asp-controller="Knowledge" asp-action="Faqs" class="nk-menu-link"><span class="nk-menu-text">FAQs</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g4 = Any("Assessments/Scheduled", "Assessments/CertificationTracker", "Assessments/Retakes", "Quizzes/Reviews");
+                                    <li class="nk-menu-item has-sub @g4">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-task-c"></em></span><span class="nk-menu-text">Assessments &amp; Certifications</span></a>
+                                        <ul class="nk-menu-sub" style="@(g4 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Assessments", "Scheduled")"><a asp-controller="Assessments" asp-action="Scheduled" class="nk-menu-link"><span class="nk-menu-text">Scheduled Assessments</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "CertificationTracker")"><a asp-controller="Assessments" asp-action="CertificationTracker" class="nk-menu-link"><span class="nk-menu-text">Certification Tracker</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "Retakes")"><a asp-controller="Assessments" asp-action="Retakes" class="nk-menu-link"><span class="nk-menu-text">Retake Requests</span></a></li>
+                                            <li class="nk-menu-item @Active("Quizzes", "Reviews")"><a asp-controller="Quizzes" asp-action="Reviews" class="nk-menu-link"><span class="nk-menu-text">Grade Review</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g5 = Any("Reports/Index", "Progress/Individual", "Progress/Departments", "Feedback/Index");
+                                    <li class="nk-menu-item has-sub @g5">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-growth-fill"></em></span><span class="nk-menu-text">Performance Reports</span></a>
+                                        <ul class="nk-menu-sub" style="@(g5 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Reports", "Index")"><a asp-controller="Reports" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Course Analytics</span></a></li>
+                                            <li class="nk-menu-item @Active("Progress", "Individual")"><a asp-controller="Progress" asp-action="Individual" class="nk-menu-link"><span class="nk-menu-text">Individual Progress Report</span></a></li>
+                                            <li class="nk-menu-item @Active("Progress", "Departments")"><a asp-controller="Progress" asp-action="Departments" class="nk-menu-link"><span class="nk-menu-text">Departmental Performance Metrics</span></a></li>
+                                            <li class="nk-menu-item @Active("Feedback", "Index")"><a asp-controller="Feedback" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Course Feedback</span></a></li>
+                                        </ul>
+                                    </li>
+                                    <li class="nk-menu-item @Active("Support")"><a asp-controller="Support" asp-action="Index" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-headphone-fill"></em></span><span class="nk-menu-text">Support Desk</span></a></li>
+                                    <li class="nk-menu-item @Active("Admin", "Settings")"><a asp-controller="Admin" asp-action="Settings" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-setting-fill"></em></span><span class="nk-menu-text">Site Settings</span></a></li>
+                                    <li class="nk-menu-item @Active("Admin", "Sso")"><a asp-controller="Admin" asp-action="Sso" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-shield-check"></em></span><span class="nk-menu-text">Single Sign-On</span></a></li>
+                                    <li class="nk-menu-item @Active("Admin", "LearningRecords")"><a asp-controller="Admin" asp-action="LearningRecords" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-db-fill"></em></span><span class="nk-menu-text">Learning Records (xAPI)</span></a></li>
+                                    <li class="nk-menu-item @Active("Admin", "AuditLog")"><a asp-controller="Admin" asp-action="AuditLog" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-list-check"></em></span><span class="nk-menu-text">Audit Log</span></a></li>
+                                }
+                                else if (activeRole == "Principal")
+                                {
+                                    <li class="nk-menu-heading"><h6 class="overline-title text-primary-alt">Principal</h6></li>
+                                    <li class="nk-menu-item @Active("Principal", "Dashboard")"><a asp-controller="Principal" asp-action="Dashboard" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-dashboard-fill"></em></span><span class="nk-menu-text">Dashboard</span></a></li>
+                                    <li class="nk-menu-item @Active("Principal", "Courses")"><a asp-controller="Principal" asp-action="Courses" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-book-fill"></em></span><span class="nk-menu-text">Course Oversight</span></a></li>
+                                    <li class="nk-menu-item @Active("Instructor", "CreateCourse")"><a asp-controller="Instructor" asp-action="CreateCourse" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-plus-circle-fill"></em></span><span class="nk-menu-text">New Course</span></a></li>
+                                    <li class="nk-menu-item @Active("Instructor", "Batches")"><a asp-controller="Instructor" asp-action="Batches" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-users-fill"></em></span><span class="nk-menu-text">Batch Set-up</span></a></li>
+                                    var g6 = Any("Knowledge/Documents", "Knowledge/Videos", "Knowledge/Faqs");
+                                    <li class="nk-menu-item has-sub @g6">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-folder-fill"></em></span><span class="nk-menu-text">Knowledge Hub</span></a>
+                                        <ul class="nk-menu-sub" style="@(g6 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Knowledge", "Documents")"><a asp-controller="Knowledge" asp-action="Documents" class="nk-menu-link"><span class="nk-menu-text">Document Library</span></a></li>
+                                            <li class="nk-menu-item @Active("Knowledge", "Videos")"><a asp-controller="Knowledge" asp-action="Videos" class="nk-menu-link"><span class="nk-menu-text">Videos &amp; Tutorials</span></a></li>
+                                            <li class="nk-menu-item @Active("Knowledge", "Faqs")"><a asp-controller="Knowledge" asp-action="Faqs" class="nk-menu-link"><span class="nk-menu-text">FAQs</span></a></li>
+                                        </ul>
+                                    </li>
+                                    <li class="nk-menu-item @Active("Reports")"><a asp-controller="Reports" asp-action="Index" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-growth-fill"></em></span><span class="nk-menu-text">Reports &amp; Analytics</span></a></li>
+                                    var g7 = Any("Training/Sessions", "Calendar/Index");
+                                    <li class="nk-menu-item has-sub @g7">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-calendar-booking-fill"></em></span><span class="nk-menu-text">Training Calendar</span></a>
+                                        <ul class="nk-menu-sub" style="@(g7 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Training", "Sessions")"><a asp-controller="Training" asp-action="Sessions" class="nk-menu-link"><span class="nk-menu-text">Upcoming Sessions (Online/Offline)</span></a></li>
+                                            <li class="nk-menu-item @Active("Calendar", "Index")"><a asp-controller="Calendar" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Event Reminders</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g8 = Any("Assessments/Scheduled", "Assessments/CertificationTracker", "Assessments/Retakes", "Quizzes/Reviews");
+                                    <li class="nk-menu-item has-sub @g8">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-task-c"></em></span><span class="nk-menu-text">Assessments &amp; Certifications</span></a>
+                                        <ul class="nk-menu-sub" style="@(g8 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Assessments", "Scheduled")"><a asp-controller="Assessments" asp-action="Scheduled" class="nk-menu-link"><span class="nk-menu-text">Scheduled Assessments</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "CertificationTracker")"><a asp-controller="Assessments" asp-action="CertificationTracker" class="nk-menu-link"><span class="nk-menu-text">Certification Tracker</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "Retakes")"><a asp-controller="Assessments" asp-action="Retakes" class="nk-menu-link"><span class="nk-menu-text">Retake Requests</span></a></li>
+                                            <li class="nk-menu-item @Active("Quizzes", "Reviews")"><a asp-controller="Quizzes" asp-action="Reviews" class="nk-menu-link"><span class="nk-menu-text">Grade Review</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g9 = Any("Progress/Individual", "Progress/Departments");
+                                    <li class="nk-menu-item has-sub @g9">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-report-fill"></em></span><span class="nk-menu-text">Performance Reports</span></a>
+                                        <ul class="nk-menu-sub" style="@(g9 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Progress", "Individual")"><a asp-controller="Progress" asp-action="Individual" class="nk-menu-link"><span class="nk-menu-text">Individual Progress Report</span></a></li>
+                                            <li class="nk-menu-item @Active("Progress", "Departments")"><a asp-controller="Progress" asp-action="Departments" class="nk-menu-link"><span class="nk-menu-text">Departmental Performance Metrics</span></a></li>
+                                        </ul>
+                                    </li>
+                                    <li class="nk-menu-item @Active("Support")"><a asp-controller="Support" asp-action="Index" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-headphone-fill"></em></span><span class="nk-menu-text">Support</span></a></li>
+                                }
+                                else if (activeRole == "Instructor")
+                                {
+                                    <li class="nk-menu-heading"><h6 class="overline-title text-primary-alt">Teaching</h6></li>
+                                    <li class="nk-menu-item @Active("Instructor", "Dashboard")"><a asp-controller="Instructor" asp-action="Dashboard" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-dashboard-fill"></em></span><span class="nk-menu-text">Dashboard</span></a></li>
+                                    var g10 = Any("Training/Sessions", "Calendar/Index");
+                                    <li class="nk-menu-item has-sub @g10">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-calendar-booking-fill"></em></span><span class="nk-menu-text">Training Calendar</span></a>
+                                        <ul class="nk-menu-sub" style="@(g10 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Training", "Sessions")"><a asp-controller="Training" asp-action="Sessions" class="nk-menu-link"><span class="nk-menu-text">Upcoming Sessions (Online/Offline)</span></a></li>
+                                            <li class="nk-menu-item @Active("Calendar", "Index")"><a asp-controller="Calendar" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Event Reminders</span></a></li>
+                                        </ul>
+                                    </li>
+                                    <li class="nk-menu-item @Active("Instructor", "CreateCourse")"><a asp-controller="Instructor" asp-action="CreateCourse" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-plus-circle-fill"></em></span><span class="nk-menu-text">New Course</span></a></li>
+                                    <li class="nk-menu-item @Active("Instructor", "Batches")"><a asp-controller="Instructor" asp-action="Batches" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-users-fill"></em></span><span class="nk-menu-text">Batch Set-up</span></a></li>
+                                    var g11 = Any("Knowledge/Documents", "Knowledge/Videos", "Knowledge/Faqs");
+                                    <li class="nk-menu-item has-sub @g11">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-folder-fill"></em></span><span class="nk-menu-text">Knowledge Hub</span></a>
+                                        <ul class="nk-menu-sub" style="@(g11 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Knowledge", "Documents")"><a asp-controller="Knowledge" asp-action="Documents" class="nk-menu-link"><span class="nk-menu-text">Document Library</span></a></li>
+                                            <li class="nk-menu-item @Active("Knowledge", "Videos")"><a asp-controller="Knowledge" asp-action="Videos" class="nk-menu-link"><span class="nk-menu-text">Videos &amp; Tutorials</span></a></li>
+                                            <li class="nk-menu-item @Active("Knowledge", "Faqs")"><a asp-controller="Knowledge" asp-action="Faqs" class="nk-menu-link"><span class="nk-menu-text">FAQs</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g12 = Any("Assessments/Scheduled", "Assessments/Retakes", "Quizzes/Reviews", "Assessments/CertificationTracker");
+                                    <li class="nk-menu-item has-sub @g12">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-task-c"></em></span><span class="nk-menu-text">Assessments &amp; Certifications</span></a>
+                                        <ul class="nk-menu-sub" style="@(g12 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Assessments", "Scheduled")"><a asp-controller="Assessments" asp-action="Scheduled" class="nk-menu-link"><span class="nk-menu-text">Scheduled Assessments</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "Retakes")"><a asp-controller="Assessments" asp-action="Retakes" class="nk-menu-link"><span class="nk-menu-text">Retake Requests</span></a></li>
+                                            <li class="nk-menu-item @Active("Quizzes", "Reviews")"><a asp-controller="Quizzes" asp-action="Reviews" class="nk-menu-link"><span class="nk-menu-text">Grade Review</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "CertificationTracker")"><a asp-controller="Assessments" asp-action="CertificationTracker" class="nk-menu-link"><span class="nk-menu-text">Downloadable Certificates</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g13 = Any("Reports/Index", "Progress/Individual", "Progress/Departments", "Feedback/Index");
+                                    <li class="nk-menu-item has-sub @g13">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-growth-fill"></em></span><span class="nk-menu-text">Performance Reports</span></a>
+                                        <ul class="nk-menu-sub" style="@(g13 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Reports", "Index")"><a asp-controller="Reports" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Course Analytics</span></a></li>
+                                            <li class="nk-menu-item @Active("Progress", "Individual")"><a asp-controller="Progress" asp-action="Individual" class="nk-menu-link"><span class="nk-menu-text">Individual Progress Report</span></a></li>
+                                            <li class="nk-menu-item @Active("Progress", "Departments")"><a asp-controller="Progress" asp-action="Departments" class="nk-menu-link"><span class="nk-menu-text">Departmental Performance Metrics</span></a></li>
+                                            <li class="nk-menu-item @Active("Feedback", "Index")"><a asp-controller="Feedback" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Course Feedback</span></a></li>
+                                        </ul>
+                                    </li>
+                                    <li class="nk-menu-item @Active("Support")"><a asp-controller="Support" asp-action="Index" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-headphone-fill"></em></span><span class="nk-menu-text">Support</span></a></li>
+                                }
+                                else
+                                {
+                                    <li class="nk-menu-heading"><h6 class="overline-title text-primary-alt">My Learning</h6></li>
+                                    <li class="nk-menu-item @Active("Home", "Dashboard")"><a asp-controller="Home" asp-action="Dashboard" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-dashboard-fill"></em></span><span class="nk-menu-text">Dashboard</span></a></li>
+                                    var g14 = Any("Training/Sessions", "Calendar/Index");
+                                    <li class="nk-menu-item has-sub @g14">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-calendar-booking-fill"></em></span><span class="nk-menu-text">Training Calendar</span></a>
+                                        <ul class="nk-menu-sub" style="@(g14 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Training", "Sessions")"><a asp-controller="Training" asp-action="Sessions" class="nk-menu-link"><span class="nk-menu-text">Upcoming Sessions (Online/Offline)</span></a></li>
+                                            <li class="nk-menu-item @Active("Calendar", "Index")"><a asp-controller="Calendar" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Event Reminders</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g15 = Any("Courses/MyCourses?status=ongoing", "Courses/MyCourses?status=completed", "Courses/Recommended");
+                                    <li class="nk-menu-item has-sub @g15">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-book-fill"></em></span><span class="nk-menu-text">My Courses</span></a>
+                                        <ul class="nk-menu-sub" style="@(g15 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Courses", "MyCourses", "status", "ongoing")"><a asp-controller="Courses" asp-action="MyCourses" asp-route-status="ongoing" class="nk-menu-link"><span class="nk-menu-text">Ongoing Courses</span></a></li>
+                                            <li class="nk-menu-item @Active("Courses", "MyCourses", "status", "completed")"><a asp-controller="Courses" asp-action="MyCourses" asp-route-status="completed" class="nk-menu-link"><span class="nk-menu-text">Completed Courses</span></a></li>
+                                            <li class="nk-menu-item @Active("Courses", "Recommended")"><a asp-controller="Courses" asp-action="Recommended" class="nk-menu-link"><span class="nk-menu-text">Recommended Training</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g16 = Any("Courses/Catalog", "Courses/Partner");
+                                    <li class="nk-menu-item has-sub @g16">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-plus-circle-fill"></em></span><span class="nk-menu-text">Enroll for Courses</span></a>
+                                        <ul class="nk-menu-sub" style="@(g16 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Courses", "Catalog")"><a asp-controller="Courses" asp-action="Catalog" class="nk-menu-link"><span class="nk-menu-text">Enroll for Courses</span></a></li>
+                                            <li class="nk-menu-item @Active("Courses", "Partner")"><a asp-controller="Courses" asp-action="Partner" class="nk-menu-link"><span class="nk-menu-text">Enroll (Partner) Courses</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g17 = Any("Courses/Path?kind=Compliance", "Courses/Path?kind=RoleSpecific", "Courses/Path?kind=Leadership");
+                                    <li class="nk-menu-item has-sub @g17">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-signal"></em></span><span class="nk-menu-text">Learning Path</span></a>
+                                        <ul class="nk-menu-sub" style="@(g17 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Courses", "Path", "kind", "Compliance")"><a asp-controller="Courses" asp-action="Path" asp-route-kind="Compliance" class="nk-menu-link"><span class="nk-menu-text">Mandatory Compliance Training</span></a></li>
+                                            <li class="nk-menu-item @Active("Courses", "Path", "kind", "RoleSpecific")"><a asp-controller="Courses" asp-action="Path" asp-route-kind="RoleSpecific" class="nk-menu-link"><span class="nk-menu-text">Role-Specific Skill Development</span></a></li>
+                                            <li class="nk-menu-item @Active("Courses", "Path", "kind", "Leadership")"><a asp-controller="Courses" asp-action="Path" asp-route-kind="Leadership" class="nk-menu-link"><span class="nk-menu-text">Leadership Programs</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g18 = Any("Knowledge/Documents", "Knowledge/Videos", "Knowledge/Faqs");
+                                    <li class="nk-menu-item has-sub @g18">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-folder-fill"></em></span><span class="nk-menu-text">Knowledge Hub</span></a>
+                                        <ul class="nk-menu-sub" style="@(g18 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Knowledge", "Documents")"><a asp-controller="Knowledge" asp-action="Documents" class="nk-menu-link"><span class="nk-menu-text">Document Library</span></a></li>
+                                            <li class="nk-menu-item @Active("Knowledge", "Videos")"><a asp-controller="Knowledge" asp-action="Videos" class="nk-menu-link"><span class="nk-menu-text">Videos &amp; Tutorials</span></a></li>
+                                            <li class="nk-menu-item @Active("Knowledge", "Faqs")"><a asp-controller="Knowledge" asp-action="Faqs" class="nk-menu-link"><span class="nk-menu-text">FAQs</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g19 = Any("Assessments/SelfAssessments", "Assessments/Scheduled", "Assessments/CertificationTracker", "Assessments/Retakes");
+                                    <li class="nk-menu-item has-sub @g19">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-task-c"></em></span><span class="nk-menu-text">Assessments &amp; Certifications</span></a>
+                                        <ul class="nk-menu-sub" style="@(g19 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Assessments", "SelfAssessments")"><a asp-controller="Assessments" asp-action="SelfAssessments" class="nk-menu-link"><span class="nk-menu-text">Self Assessments</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "Scheduled")"><a asp-controller="Assessments" asp-action="Scheduled" class="nk-menu-link"><span class="nk-menu-text">Scheduled Assessments</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "CertificationTracker")"><a asp-controller="Assessments" asp-action="CertificationTracker" class="nk-menu-link"><span class="nk-menu-text">Certification Tracker</span></a></li>
+                                            <li class="nk-menu-item @Active("Assessments", "Retakes")"><a asp-controller="Assessments" asp-action="Retakes" class="nk-menu-link"><span class="nk-menu-text">Retake Assessments</span></a></li>
+                                        </ul>
+                                    </li>
+                                    var g20 = Any("Progress/Individual", "Courses/MyGrades", "Certificates/Index");
+                                    <li class="nk-menu-item has-sub @g20">
+                                        <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-report-fill"></em></span><span class="nk-menu-text">My Performance</span></a>
+                                        <ul class="nk-menu-sub" style="@(g20 != "" ? "display:block" : null)">
+                                            <li class="nk-menu-item @Active("Progress", "Individual")"><a asp-controller="Progress" asp-action="Individual" class="nk-menu-link"><span class="nk-menu-text">Individual Progress Report</span></a></li>
+                                            <li class="nk-menu-item @Active("Courses", "MyGrades")"><a asp-controller="Courses" asp-action="MyGrades" class="nk-menu-link"><span class="nk-menu-text">My Grades</span></a></li>
+                                            <li class="nk-menu-item @Active("Certificates", "Index")"><a asp-controller="Certificates" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">My Certificates</span></a></li>
+                                        </ul>
+                                    </li>
+                                    <li class="nk-menu-item @Active("Feedback")"><a asp-controller="Feedback" asp-action="Index" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-star-fill"></em></span><span class="nk-menu-text">Course Feedback</span></a></li>
+                                    <li class="nk-menu-item @Active("Support")"><a asp-controller="Support" asp-action="Index" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-headphone-fill"></em></span><span class="nk-menu-text">Support</span></a></li>
+                                }
+                                <li class="nk-menu-heading"><h6 class="overline-title text-primary-alt">General</h6></li>
+                                <li class="nk-menu-item @Active("Communication")">
+                                    <a asp-controller="Communication" asp-action="Index" class="nk-menu-link">
+                                        <span class="nk-menu-icon"><em class="icon ni ni-chat-circle-fill"></em></span>
+                                        <span class="nk-menu-text">Communication Center</span>
+                                        @if (unreadMessages > 0)
+                                        {
+                                            <span class="nk-menu-badge bg-danger text-white">@unreadMessages</span>
+                                        }
+                                    </a>
+                                </li>
+                                <li class="nk-menu-item @Active("Courses", "Catalog")"><a asp-controller="Courses" asp-action="Catalog" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-view-grid-fill"></em></span><span class="nk-menu-text">Course Catalog</span></a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        <div class="nk-wrap">
+            <div class="nk-header nk-header-fixed is-light">
+                <div class="container-fluid">
+                    <div class="nk-header-wrap">
+                        @if (isAuth)
+                        {
+                            <div class="nk-menu-trigger d-xl-none ms-n1">
+                                <a href="#" class="nk-nav-toggle nk-quick-nav-icon" data-target="sidebarMenu"><em class="icon ni ni-menu"></em></a>
+                            </div>
+                        }
+                        <div class="nk-header-brand @(isAuth ? "d-xl-none" : "")">
+                            <a asp-controller="Home" asp-action="Index" class="logo-link">
+                                <img class="logo-light logo-img" src="@brandLogo" alt="logo" />
+                                <img class="logo-dark logo-img" src="@brandLogo" alt="logo-dark" />
+                            </a>
+                        </div>
+                        @if (isAuth && !string.IsNullOrEmpty(orgName))
+                        {
+                            <div class="nk-header-org d-none d-md-block" title="@orgName">@orgName</div>
+                        }
+                        <div class="nk-header-tools">
+                            <ul class="nk-quick-nav">
+                                @if (isAuth)
+                                {
+                                    <li>
+                                        <a asp-controller="Communication" asp-action="Index" class="nk-quick-nav-icon" title="Communication Center">
+                                            <div class="icon-status @(unreadMessages > 0 ? "icon-status-danger" : "icon-status-na")"><em class="icon ni ni-chat"></em></div>
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a asp-controller="Notifications" asp-action="Index" class="nk-quick-nav-icon" title="Notifications">
+                                            <div class="icon-status @(unreadNotifications > 0 ? "icon-status-danger" : "icon-status-na")"><em class="icon ni ni-bell"></em></div>
+                                        </a>
+                                    </li>
+                                    @if (myRoles.Count > 1)
+                                    {
+                                        <li class="dropdown role-switch">
+                                            <a href="#" class="dropdown-toggle me-2" data-bs-toggle="dropdown">
+                                                <div class="user-toggle">
+                                                    <div class="user-info d-none d-md-block text-end">
+                                                        <div class="user-status text-danger small fw-semibold">@ActiveRole.Label(activeRole)</div>
+                                                        <div class="user-name dropdown-indicator">Switch Role</div>
+                                                    </div>
+                                                </div>
+                                            </a>
+                                            <div class="dropdown-menu dropdown-menu-end dropdown-menu-s1">
+                                                <div class="dropdown-inner">
+                                                    <ul class="link-list">
+                                                        @foreach (var r in ActiveRole.Priority.Where(r => myRoles.Contains(r)))
+                                                        {
+                                                            <li>
+                                                                <form asp-controller="Account" asp-action="SwitchRole" method="post" class="m-0">
+                                                                    <input type="hidden" name="role" value="@r" />
+                                                                    <button type="submit" class="btn btn-link p-0 text-start w-100 @(r == activeRole ? "fw-bold" : "")" style="text-decoration:none">
+                                                                        <em class="icon ni @(r == activeRole ? "ni-check-circle-fill text-primary" : "ni-user-round")"></em><span>@ActiveRole.Label(r)</span>
+                                                                    </button>
+                                                                </form>
+                                                            </li>
+                                                        }
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    }
+                                    <li class="dropdown user-dropdown">
+                                        <a href="#" class="dropdown-toggle me-n1" data-bs-toggle="dropdown">
+                                            <div class="user-toggle">
+                                                <div class="user-avatar sm"><span>@initials</span></div>
+                                                <div class="user-info d-none d-md-block">
+                                                    <div class="user-status text-muted">@ActiveRole.Label(activeRole)</div>
+                                                    <div class="user-name dropdown-indicator">@fullName</div>
+                                                </div>
+                                            </div>
+                                        </a>
+                                        <div class="dropdown-menu dropdown-menu-md dropdown-menu-end">
+                                            <div class="dropdown-inner user-card-wrap bg-lighter">
+                                                <div class="user-card">
+                                                    <div class="user-avatar"><span>@initials</span></div>
+                                                    <div class="user-info">
+                                                        <span class="lead-text">@fullName</span>
+                                                        <span class="sub-text">@ActiveRole.Label(activeRole) · @User.Identity!.Name</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="dropdown-inner">
+                                                <ul class="link-list">
+                                                    <li><a asp-controller="Account" asp-action="Profile"><em class="icon ni ni-user-alt"></em><span>View Profile</span></a></li>
+                                                </ul>
+                                            </div>
+                                            <div class="dropdown-inner">
+                                                <ul class="link-list">
+                                                    <li>
+                                                        <form asp-controller="Account" asp-action="Logout" method="post" class="m-0">
+                                                            <button type="submit" class="btn btn-link p-0 text-start w-100" style="text-decoration:none"><em class="icon ni ni-signout"></em><span>Sign Out</span></button>
+                                                        </form>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </li>
+                                }
+                                else
+                                {
+                                    <li><a asp-controller="Courses" asp-action="Catalog" class="link">Catalog</a></li>
+                                    <li><a asp-controller="Account" asp-action="Login" class="btn btn-sm btn-primary">Sign in</a></li>
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nk-content">
+                <div class="container-fluid">
+                    <div class="nk-content-inner">
+                        <div class="nk-content-body">
+                            @if (TempData["Ok"] != null)
+                            {
+                                <div class="alert alert-success alert-icon alert-dismissible fade show">
+                                    <em class="icon ni ni-check-circle"></em> @TempData["Ok"]
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            }
+                            @if (TempData["Err"] != null)
+                            {
+                                <div class="alert alert-danger alert-icon alert-dismissible fade show">
+                                    <em class="icon ni ni-alert-circle"></em> @TempData["Err"]
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            }
+                            @RenderBody()
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nk-footer">
+                <div class="container-fluid">
+                    <div class="nk-footer-wrap">
+                        <div class="nk-footer-copyright">Learning Management System <span class="text-muted" title="Build identity — quote this when reporting an issue">@LMS.Web.Services.BuildInfo.Display</span> | Powered by AbsoluteSYS</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="~/assets/js/bundle.js" asp-append-version="true"></script>
+<script src="~/assets/js/scripts.js" asp-append-version="true"></script>
+<script nonce="@Context.CspNonce()">
+    // Highlight the selected menu item and keep its submenu expanded.
+    // Fully replaces the theme's NioApp.CurrentLink matcher: its regex approach
+    // fails on hrefs with query strings, and it strips 'active' from every item
+    // it can't match — collapsing the menu on drill-down pages. Disable it.
+    if (window.NioApp) { NioApp.CurrentLink = function () { }; }
+
+    // Ordinary menu pages already arrive correct: the layout marks the active
+    // item and opens its submenu server-side, so the sidebar is right at first
+    // paint and never visibly re-arranges itself. This pass covers what the
+    // server cannot know — drill-down pages with no menu entry of their own —
+    // and scrolls the selection into view.
+    //
+    // It runs IMMEDIATELY, not on 'load': bundle.js above has already created
+    // the menu and initialised SimpleBar, whereas 'load' waits for every image
+    // and font on the page, which on a cold cache is exactly the window in
+    // which the menu was seen to jump.
+    (function () {
+        var path = window.location.pathname.replace(/\/$/, '').toLowerCase();
+        var pathWithQuery = (path + window.location.search).toLowerCase();
+        var links = document.querySelectorAll('.nk-menu .nk-menu-link[href]');
+        var best = null, bestLen = -1;
+
+        links.forEach(function (link) {
+            var href = link.getAttribute('href');
+            if (!href || href === '#') return;
+            var hrefPath = href.split('#')[0].toLowerCase().replace(/\/$/, '');
+            var target = hrefPath.indexOf('?') >= 0 ? pathWithQuery : path;
+            var candidate = hrefPath.indexOf('?') >= 0 ? hrefPath : hrefPath.split('?')[0];
+            if (candidate && (target === candidate || (candidate !== '' && target.indexOf(candidate + '/') === 0))) {
+                if (candidate.length > bestLen) { best = link; bestLen = candidate.length; }
+            }
+        });
+
+        // Drill-down pages (course player, detail views, …) match no sidebar link,
+        // so the item the page belongs under must be resolved another way. Order:
+        //   1. exact URL match (above) — real menu pages,
+        //   2. in-tab history — the item the user navigated from (context-accurate
+        //      for pages reachable from several places, e.g. course Details),
+        //   3. an explicit ownership map — deterministic fallback so a fresh tab,
+        //      direct link or hard refresh still highlights the right item.
+        // This keeps the selected item expanded and highlighted for every submenu
+        // and role, regardless of how the page was reached.
+        function linkByHref(h) {
+            var found = null;
+            links.forEach(function (link) {
+                if ((link.getAttribute('href') || '').toLowerCase() === h.toLowerCase()) { found = link; }
+            });
+            return found;
+        }
+
+        var KEY = 'lms-active-menu';
+        if (best) {
+            try { sessionStorage.setItem(KEY, best.getAttribute('href')); } catch (e) { }
+        } else {
+            var saved = null;
+            try { saved = sessionStorage.getItem(KEY); } catch (e) { }
+            if (saved) { best = linkByHref(saved); }
+
+            if (!best) {
+                // path prefix (lower-case) -> owning menu link href
+                var OWN = [
+                    ['/courses/learn/', '/Courses/MyCourses?status=ongoing'],
+                    ['/courses/details/', '/Courses/MyCourses?status=ongoing']
+                ];
+                for (var i = 0; i < OWN.length && !best; i++) {
+                    if (path.indexOf(OWN[i][0]) === 0) { best = linkByHref(OWN[i][1]); }
+                }
+            }
+        }
+
+        if (best) {
+            var li = best.closest('li');
+            if (li) li.classList.add('active', 'current-page');
+            var sub = best.closest('.nk-menu-sub');
+            if (sub) {
+                sub.style.display = 'block';
+                var parent = sub.closest('li.has-sub');
+                if (parent) parent.classList.add('active', 'current-page');
+            }
+            // Highlighting alone is not enough on a long menu: the sidebar's own
+            // scroll container starts at the top on every page load, so an item
+            // near the bottom (and any submenu opened under it) is highlighted
+            // off-screen and the menu looks like it jumped back to the top.
+            // Scroll the SIDEBAR container — never the page — to bring it back.
+            //
+            // SimpleBar builds and sizes that container asynchronously, so on the
+            // first frames after 'load' it still reports nothing to scroll; the
+            // submenu opened just above also has to be laid out before the item's
+            // position is final. Retry briefly (setTimeout, not rAF, so a
+            // background tab still settles) until the measurement is usable.
+            var tries = 0;
+            (function attempt() {
+                if (revealInSidebar(best)) return;
+                if (++tries < 25) setTimeout(attempt, 40);
+            })();
+        }
+
+        // Returns true when it has finished (scrolled, already visible, or the
+        // sidebar isn't on screen); false means "measure again shortly".
+        function revealInSidebar(link) {
+            var menu = document.querySelector('.nk-sidebar-menu');
+            if (!menu) return true;
+            // SimpleBar moves the overflow onto an inner wrapper; without it the
+            // menu element scrolls itself. Until that wrapper exists the menu is
+            // still unclipped, so EVERY item measures as "visible" — wait for it
+            // rather than concluding there is nothing to do.
+            var wrapper = menu.querySelector('.simplebar-content-wrapper');
+            if (!wrapper && menu.hasAttribute('data-simplebar')) return false;   // not initialised yet
+            var scroller = wrapper || menu;
+            if (!scroller.clientHeight) return true;            // sidebar hidden (mobile / off-canvas)
+
+            var lr = link.getBoundingClientRect();
+            var sr = scroller.getBoundingClientRect();
+            if (lr.top >= sr.top && lr.bottom <= sr.bottom) return true;   // already in view — leave it alone
+
+            var max = scroller.scrollHeight - scroller.clientHeight;
+            if (max <= 0) return false;    // off-screen yet "unscrollable" → not sized yet, retry
+
+            // Centre the item in the visible area, clamped to the scroll range.
+            var delta = (lr.top - sr.top) - (scroller.clientHeight - lr.height) / 2;
+            scroller.scrollTop = Math.max(0, Math.min(max, scroller.scrollTop + delta));
+            return true;
+        }
+    })();
+</script>
+<script nonce="@Context.CspNonce()">
+    // Delegated handlers that replace inline on* attributes removed for the strict
+    // Content-Security-Policy (script-src has no 'unsafe-inline').
+    document.addEventListener("submit", function (e) {
+        var f = e.target.closest("form[data-confirm]");
+        if (f && !window.confirm(f.getAttribute("data-confirm"))) e.preventDefault();
+    });
+    document.addEventListener("click", function (e) {
+        var c = e.target.closest("[data-confirm]:not(form)");
+        if (c && !window.confirm(c.getAttribute("data-confirm"))) { e.preventDefault(); e.stopPropagation(); }
+        if (e.target.closest("[data-action=\"print\"]")) { e.preventDefault(); window.print(); }
+    });
+</script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

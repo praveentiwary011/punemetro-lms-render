@@ -1,0 +1,57 @@
+@model List<LMS.Web.Controllers.QuizzesController.ReviewRow>
+@{
+    ViewData["Title"] = "Grade review";
+}
+<h2 class="mb-1"><i class="bi bi-clipboard-check me-2"></i>Subjective grade review</h2>
+<p class="text-muted mb-4">Written answers the auto-grader flagged as low-confidence or near the pass boundary are held here. Confirm the proposed score or override it — the course completes and any certificate issues only after you decide.</p>
+
+@if (TempData["Ok"] != null) { <div class="alert alert-success">@TempData["Ok"]</div> }
+@if (TempData["Err"] != null) { <div class="alert alert-danger">@TempData["Err"]</div> }
+
+@if (!Model.Any())
+{
+    <div class="card p-4 text-muted"><i class="bi bi-check2-circle me-1"></i>Nothing awaiting review.</div>
+}
+else
+{
+    foreach (var r in Model)
+    {
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between flex-wrap">
+                    <div><strong>@r.Question</strong>
+                        <div class="small text-muted">@r.Course · @r.Quiz · @r.Student</div>
+                    </div>
+                    <span class="badge text-bg-warning align-self-start"><i class="bi bi-hourglass-split me-1"></i>Awaiting review</span>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(r.Rubric)) { <div class="small mt-2"><strong>Rubric:</strong> <span class="text-muted">@r.Rubric</span></div> }
+                @if (!string.IsNullOrWhiteSpace(r.ReferenceAnswer)) { <div class="small"><strong>Reference:</strong> <span class="text-muted">@r.ReferenceAnswer</span></div> }
+
+                <div class="border rounded bg-light-subtle p-2 my-2 small"><strong>Trainee's answer</strong><br />@r.Answer</div>
+
+                <div class="small text-muted mb-2">
+                    <i class="bi bi-robot me-1"></i>Auto-grade proposal: <strong>@r.Proposed.ToString("0.#") / @r.MaxPoints.ToString("0.#")</strong> pts
+                    @if (!string.IsNullOrWhiteSpace(r.Feedback)) { <span>· @r.Feedback</span> }
+                    @if (!string.IsNullOrWhiteSpace(r.Citations)) { <div>Cited: @r.Citations</div> }
+                </div>
+
+                <form method="post" asp-action="ResolveReview" class="row g-2 align-items-end">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="reviewId" value="@r.ReviewId" />
+                    <div class="col-auto">
+                        <label class="form-label small mb-0">Score (0–@r.MaxPoints.ToString("0.#"))</label>
+                        <input name="score" type="number" step="0.5" min="0" max="@r.MaxPoints" value="@r.Proposed.ToString("0.#")" class="form-control form-control-sm" style="width:8rem" required />
+                    </div>
+                    <div class="col">
+                        <label class="form-label small mb-0">Feedback to trainee (optional)</label>
+                        <input name="feedback" class="form-control form-control-sm" value="@r.Feedback" />
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-primary btn-sm">Confirm grade</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    }
+}

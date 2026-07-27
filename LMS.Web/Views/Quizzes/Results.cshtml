@@ -1,0 +1,40 @@
+@model Quiz
+@{
+    ViewData["Title"] = "Quiz results";
+    var submitted = Model.Attempts.Where(a => a.SubmittedAt != null).ToList();
+}
+<nav class="small mb-2">
+    <a asp-controller="Instructor" asp-action="ManageCourse" asp-route-id="@Model.CourseId" class="text-decoration-none">@Model.Course?.Title</a>
+    <span class="text-muted">/ Quiz results</span>
+</nav>
+<h2 class="mb-1">@Model.Title — results</h2>
+<p class="text-muted mb-4">
+    @submitted.Count attempts ·
+    avg @((submitted.Count == 0 ? 0 : submitted.Average(a => a.MaxScore > 0 ? a.Score / a.MaxScore * 100 : 0)).ToString("0.#"))% ·
+    pass rate @((submitted.Count == 0 ? 0 : (double)submitted.Count(a => a.MaxScore > 0 && a.Score / a.MaxScore * 100 >= Model.PassingScore) / submitted.Count * 100).ToString("0.#"))%
+</p>
+<div class="card" style="max-width:900px">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Student</th><th>Attempt</th><th>Submitted</th><th>Score</th><th>Result</th></tr></thead>
+        <tbody>
+        @if (!submitted.Any())
+        {
+            <tr><td colspan="5" class="text-muted">No attempts yet.</td></tr>
+        }
+        @foreach (var a in submitted)
+        {
+            var pct = a.MaxScore > 0 ? a.Score / a.MaxScore * 100 : 0;
+            <tr>
+                <td>@a.Student?.FullName</td>
+                <td>@a.AttemptNumber</td>
+                <td class="small">@a.SubmittedAt?.ToString("MMM d, HH:mm")</td>
+                <td>@a.Score.ToString("0.#") / @a.MaxScore.ToString("0.#") (@pct.ToString("0.#")%)</td>
+                <td>
+                    @if (pct >= Model.PassingScore) { <span class="badge text-bg-success">Passed</span> }
+                    else { <span class="badge text-bg-danger">Failed</span> }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,81 @@
+@model List<SupportTicket>
+@{
+    ViewData["Title"] = "Support";
+    bool isAdmin = ViewBag.IsAdmin;
+}
+<h2 class="mb-4"><em class="icon ni ni-headphone me-2"></em>Support &amp; Assistance</h2>
+
+<div class="d-flex gap-2 mb-3">
+    <a class="btn btn-sm @(ViewBag.Category == null ? "btn-primary" : "btn-outline-primary")" asp-action="Index">All</a>
+    <a class="btn btn-sm @(ViewBag.Category == TicketCategory.TechnicalAssistance ? "btn-primary" : "btn-outline-primary")" asp-action="Index" asp-route-category="TechnicalAssistance">Technical Assistance</a>
+    <a class="btn btn-sm @(ViewBag.Category == TicketCategory.LearningQuery ? "btn-primary" : "btn-outline-primary")" asp-action="Index" asp-route-category="LearningQuery">Learning Queries</a>
+    <a class="btn btn-sm @(ViewBag.Category == TicketCategory.HRLearningTeam ? "btn-primary" : "btn-outline-primary")" asp-action="Index" asp-route-category="HRLearningTeam">HR / Learning Team</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card p-4">
+            <h6 class="mb-3">Raise a request</h6>
+            <form method="post" asp-action="Create">
+                @Html.AntiForgeryToken()
+                <div class="mb-2">
+                    <select name="category" class="form-select">
+                        <option value="0">Technical Assistance</option>
+                        <option value="1">Learning Query</option>
+                        <option value="2">Contact HR / Learning Team</option>
+                    </select>
+                </div>
+                <div class="mb-2"><input name="subject" class="form-control" placeholder="Subject" required /></div>
+                <div class="mb-3"><textarea name="body" class="form-control" rows="4" placeholder="Describe your issue or question" required></textarea></div>
+                <button class="btn btn-primary">Submit</button>
+            </form>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">@(isAdmin ? "All tickets" : "My tickets")</div>
+            <ul class="list-group list-group-flush">
+                @if (!Model.Any())
+                {
+                    <li class="list-group-item text-muted">No tickets.</li>
+                }
+                @foreach (var t in Model)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>@t.Subject</strong>
+                                <span class="badge text-bg-light">@(t.Category == TicketCategory.TechnicalAssistance ? "Technical" : t.Category == TicketCategory.LearningQuery ? "Learning" : "HR")</span>
+                                @switch (t.Status)
+                                {
+                                    case TicketStatus.Answered: <span class="badge text-bg-info">Answered</span>; break;
+                                    case TicketStatus.Closed: <span class="badge text-bg-secondary">Closed</span>; break;
+                                    default: <span class="badge text-bg-warning">Open</span>; break;
+                                }
+                                <div class="small text-muted">@t.Body</div>
+                                <div class="small text-muted">@(isAdmin ? t.RaisedBy?.FullName + " · " : "")@t.CreatedAt.ToString("MMM d, yyyy HH:mm")</div>
+                                @if (!string.IsNullOrEmpty(t.Response))
+                                {
+                                    <div class="alert alert-light border mt-2 mb-0 py-2 small">
+                                        <strong>Response:</strong> @t.Response
+                                        <span class="text-muted">(@t.RespondedAt?.ToString("MMM d, HH:mm"))</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        @if (isAdmin && t.Status != TicketStatus.Closed)
+                        {
+                            <form method="post" asp-action="Respond" class="d-flex gap-1 mt-2">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <input name="response" value="@t.Response" class="form-control form-control-sm" placeholder="Write a response…" required />
+                                <button name="close" value="false" class="btn btn-sm btn-primary text-nowrap">Reply</button>
+                                <button name="close" value="true" class="btn btn-sm btn-outline-secondary text-nowrap">Reply &amp; close</button>
+                            </form>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>

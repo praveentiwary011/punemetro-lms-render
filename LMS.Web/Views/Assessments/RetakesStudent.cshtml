@@ -1,0 +1,65 @@
+@model List<RetakeRequest>
+@{
+    ViewData["Title"] = "Retake Assessments";
+    var exhausted = (List<Quiz>)ViewBag.Exhausted;
+}
+<h2 class="mb-4"><em class="icon ni ni-repeat me-2"></em>Retake Assessments</h2>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card p-4">
+            <h6 class="mb-3">Request a retake</h6>
+            @if (!exhausted.Any())
+            {
+                <p class="text-muted mb-0">You have no assessments with exhausted attempts. Retakes can be requested once all attempts are used.</p>
+            }
+            else
+            {
+                <form method="post" asp-action="RequestRetake">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-2">
+                        <select name="quizId" class="form-select" required>
+                            <option value="">Select assessment…</option>
+                            @foreach (var q in exhausted)
+                            {
+                                <option value="@q.Id">@q.Course?.Code — @q.Title</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3"><textarea name="reason" class="form-control" rows="3" placeholder="Why do you need a retake?" required></textarea></div>
+                    <button class="btn btn-primary">Submit request</button>
+                </form>
+            }
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">My requests</div>
+            <table class="table align-middle mb-0">
+                <thead><tr><th>Assessment</th><th>Requested</th><th>Status</th><th>Note</th></tr></thead>
+                <tbody>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="4" class="text-muted">No retake requests yet.</td></tr>
+                }
+                @foreach (var r in Model)
+                {
+                    <tr>
+                        <td>@r.Quiz?.Course?.Code — @r.Quiz?.Title</td>
+                        <td class="small">@r.RequestedAt.ToString("MMM d, yyyy")</td>
+                        <td>
+                            @switch (r.Status)
+                            {
+                                case RetakeStatus.Approved: <span class="badge text-bg-success">Approved</span>; break;
+                                case RetakeStatus.Rejected: <span class="badge text-bg-danger">Rejected</span>; break;
+                                default: <span class="badge text-bg-warning">Pending</span>; break;
+                            }
+                        </td>
+                        <td class="small text-muted">@r.DecisionNote</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

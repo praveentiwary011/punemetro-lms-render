@@ -1,0 +1,109 @@
+@model Assignment
+@{
+    ViewData["Title"] = Model.Title;
+    bool isOwner = ViewBag.IsOwner;
+    var mySubmission = (Submission?)ViewBag.MySubmission;
+    var isLate = Model.DueDate != null && DateTime.UtcNow > Model.DueDate;
+}
+<nav class="small mb-2">
+    <a asp-controller="Courses" asp-action="Details" asp-route-id="@Model.CourseId" class="text-decoration-none">@Model.Course?.Title</a>
+    <span class="text-muted">/ Assignment</span>
+</nav>
+<h2>@Model.Title</h2>
+<p class="text-muted">
+    @(Model.DueDate != null ? $"Due {Model.DueDate.Value:MMMM d, yyyy HH:mm} UTC" : "No due date")
+    · @Model.MaxPoints.ToString("0.#") points
+    @if (isLate && Model.AllowLateSubmission) { <span class="badge text-bg-warning">Past due — late submissions allowed</span> }
+    else if (isLate) { <span class="badge text-bg-danger">Closed</span> }
+</p>
+<div class="card p-4 mb-4">@Html.Raw(Model.Description.Replace("\n", "<br/>"))</div>
+
+@if (User.IsInRole("Student"))
+{
+    <div class="card p-4 mb-4" style="max-width:720px">
+        <h5 class="mb-3">Your submission</h5>
+        @if (mySubmission != null)
+        {
+            <div class="alert @(mySubmission.Grade != null ? "alert-success" : "alert-info")">
+                Submitted @mySubmission.SubmittedAt.ToString("MMM d, yyyy HH:mm") UTC
+                @if (mySubmission.FileUrl != null)
+                {
+                    <text> · </text><a href="@mySubmission.FileUrl" target="_blank">attached file</a>
+                }
+                @if (mySubmission.Grade != null)
+                {
+                    <hr class="my-2" />
+                    <strong>Grade: @mySubmission.Grade.Value.ToString("0.#") / @Model.MaxPoints.ToString("0.#")</strong>
+                    @if (!string.IsNullOrEmpty(mySubmission.Feedback))
+                    {
+                        <div class="small mt-1">Feedback: @mySubmission.Feedback</div>
+                    }
+                }
+                else
+                {
+                    <div class="small">Awaiting grading. Resubmitting will replace this submission.</div>
+                }
+            </div>
+        }
+        @if (!isLate || Model.AllowLateSubmission)
+        {
+            <form method="post" asp-action="Submit" asp-route-id="@Model.Id" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label">Answer text</label>
+                    <textarea name="text" class="form-control" rows="5">@mySubmission?.Text</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Attach file (optional)</label>
+                    <input name="file" type="file" class="form-control" />
+                </div>
+                <button class="btn btn-primary">@(mySubmission == null ? "Submit" : "Resubmit")</button>
+            </form>
+        }
+    </div>
+}
+
+@if (isOwner)
+{
+    <h5 class="mb-3">Submissions (@Model.Submissions.Count)</h5>
+    <div class="card">
+        <table class="table align-middle mb-0">
+            <thead><tr><th>Student</th><th>Submitted</th><th>Content</th><th style="min-width:300px">Grade &amp; feedback</th></tr></thead>
+            <tbody>
+            @if (!Model.Submissions.Any())
+            {
+                <tr><td colspan="4" class="text-muted">No submissions yet.</td></tr>
+            }
+            @foreach (var s in Model.Submissions.OrderBy(x => x.Grade != null).ThenBy(x => x.SubmittedAt))
+            {
+                <tr>
+                    <td>@s.Student?.FullName</td>
+                    <td class="small">
+                        @s.SubmittedAt.ToString("MMM d, HH:mm")
+                        @if (Model.DueDate != null && s.SubmittedAt > Model.DueDate) { <span class="badge text-bg-warning">Late</span> }
+                    </td>
+                    <td class="small" style="max-width:280px">
+                        @if (!string.IsNullOrEmpty(s.Text))
+                        {
+                            <div class="text-truncate" title="@s.Text">@s.Text</div>
+                        }
+                        @if (s.FileUrl != null)
+                        {
+                            <a href="@s.FileUrl" target="_blank"><i class="bi bi-paperclip"></i>File</a>
+                        }
+                    </td>
+                    <td>
+                        <form method="post" asp-action="Grade" class="d-flex gap-1">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="submissionId" value="@s.Id" />
+                            <input name="grade" type="number" step="0.1" max="@Model.MaxPoints" value="@(s.Grade?.ToString("0.#"))" class="form-control form-control-sm" style="width:80px" required />
+                            <input name="feedback" value="@s.Feedback" class="form-control form-control-sm" placeholder="Feedback" />
+                            <button class="btn btn-sm btn-primary">Save</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

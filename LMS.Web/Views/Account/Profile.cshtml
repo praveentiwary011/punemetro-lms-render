@@ -1,0 +1,80 @@
+@model ApplicationUser
+@{
+    ViewData["Title"] = "Profile";
+}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <h3 class="mb-4"><i class="bi bi-person-circle me-2"></i>My profile</h3>
+        <div class="card p-4 mb-4">
+            <form method="post" asp-action="Profile">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label">Full name</label>
+                    <input name="fullName" value="@Model.FullName" class="form-control" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input value="@Model.Email" class="form-control" disabled />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Department</label>
+                    <input name="department" value="@Model.Department" class="form-control" list="deptList" />
+                    <datalist id="deptList">
+                        <option>Operations</option><option>Engineering & Maintenance</option>
+                        <option>Signalling & Telecom</option><option>Customer Service</option>
+                        <option>Safety & Security</option><option>HR & Administration</option>
+                    </datalist>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Bio</label>
+                    <textarea name="bio" class="form-control" rows="3">@Model.Bio</textarea>
+                </div>
+                <div class="mb-3 text-muted small">
+                    <i class="bi bi-stars me-1"></i>Points earned: <strong>@Model.Points</strong>
+                    · Member since @Model.CreatedAt.ToString("MMM yyyy")
+                </div>
+                <button class="btn btn-primary">Save changes</button>
+            </form>
+        </div>
+        @if (User.IsInRole("Instructor") || User.IsInRole("Principal") || User.IsInRole("Admin") || User.IsInRole("SuperUser"))
+        {
+            <div class="card p-4 mb-4">
+                <h6 class="mb-1">Certificate signature</h6>
+                <p class="text-muted small mb-3">
+                    Your signature appears in the Course Instructor slot of certificates for courses you
+                    teach — and in the Training Director slot if your organisation selects you as its
+                    certificate signatory. PNG, JPG or WebP, max 1&nbsp;MB.
+                </p>
+                @if (Model.SignatureUrl != null)
+                {
+                    <img src="@Model.SignatureUrl" alt="Current signature" class="profile-sign-preview mb-3" />
+                }
+                else
+                {
+                    <div class="alert alert-warning py-2 small mb-3">
+                        No signature uploaded yet — certificates show a placeholder, and you cannot be
+                        selected as certificate signatory until one is uploaded.
+                    </div>
+                }
+                <form method="post" asp-action="UploadSignature" enctype="multipart/form-data" class="d-flex gap-2">
+                    @Html.AntiForgeryToken()
+                    <input name="signature" type="file" accept=".png,.jpg,.jpeg,.webp" class="form-control" required />
+                    <button class="btn btn-outline-primary flex-shrink-0">Upload</button>
+                </form>
+            </div>
+        }
+        <div class="card p-4">
+            <h6 class="mb-3">Change password</h6>
+            <form method="post" asp-action="ChangePassword">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <input name="currentPassword" type="password" class="form-control" placeholder="Current password" required />
+                </div>
+                <div class="mb-3">
+                    <input name="newPassword" type="password" class="form-control" placeholder="New password (min 6 chars)" required />
+                </div>
+                <button class="btn btn-outline-primary">Change password</button>
+            </form>
+        </div>
+    </div>
+</div>

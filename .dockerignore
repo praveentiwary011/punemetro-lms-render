@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+**/lms.db*
+LMS.Web/wwwroot/uploads/
+*.command
+run.command
+deploy/
+README.md
+DEPLOYMENT.md

@@ -1,0 +1,433 @@
+/* LMS helpers layered on top of DashLite */
+
+.course-thumb {
+    height: 120px;
+    background: linear-gradient(135deg, #6576ff, #8094ff);
+    border-radius: 4px 4px 0 0;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.2rem;
+}
+
+.progress { height: .5rem; border-radius: 1rem; }
+
+.lesson-sidebar { max-height: 75vh; overflow-y: auto; }
+.lesson-sidebar .list-group-item.active {
+    background: #ebeef2;
+    color: #364a63;
+    border-color: #dbdfea;
+    font-weight: 600;
+}
+
+/* ---- Certificate (matches the official Pune Metro sample) ---- */
+.certificate-frame {
+    background: #fff;
+    border: 1px solid #dbdfea;
+    box-shadow: 0 1px 4px rgba(16, 24, 40, .06);
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 3.5rem 4rem 2.5rem;
+    text-align: center;
+    font-family: "DM Sans", sans-serif;
+}
+.cert-logo { height: 64px; margin-bottom: 1.75rem; }
+.cert-heading {
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    color: #364a63;
+    margin-bottom: 1.25rem;
+}
+.cert-divider {
+    border: 0;
+    border-top: 1px solid #e5e9f2;
+    margin: 0 2rem;
+    opacity: 1;
+}
+.cert-muted { color: #526484; font-size: 1.125rem; margin-bottom: 0; }
+.cert-name { font-size: 2.25rem; font-weight: 700; color: #364a63; }
+.cert-course { font-size: 2rem; font-weight: 700; color: #854fff; margin-top: 1.25rem; }
+.cert-grade { color: #1ee0ac; font-weight: 700; }
+.cert-signatures { margin-top: 4rem; padding: 0 2rem; }
+.cert-signline { border-top: 2px solid #364a63; width: 200px; margin: 0 auto .5rem; }
+.cert-id { color: #8094ae; font-size: .875rem; }
+.cert-qr-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .75rem;
+    margin-top: 2rem;
+}
+.cert-qr { display: inline-block; }
+.cert-qr img, .cert-qr canvas { border: 1px solid #e5e9f2; padding: 6px; background: #fff; }
+.cert-qr-caption { color: #8094ae; font-size: .75rem; margin-top: .375rem; text-align: center; }
+
+@media (max-width: 767px) {
+    .certificate-frame { padding: 2rem 1.25rem; }
+    .cert-heading { font-size: 1.75rem; }
+    .cert-name { font-size: 1.5rem; }
+    .cert-course { font-size: 1.25rem; }
+    .cert-signline { width: 120px; }
+}
+
+.avatar-sm {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #e5e9f2; color: #526484;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 600;
+}
+
+.stat-card .display-6 { font-weight: 700; color: #364a63; }
+
+/* keep cards consistent with DashLite look */
+.card { border-radius: 4px; }
+
+/* ---- Data table polish ---- */
+.table td, .table th { vertical-align: middle; }
+.table td { overflow-wrap: break-word; }
+.table thead th {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #8094ae;
+    font-weight: 600;
+    background: #f5f6fa;
+}
+
+/* Uniform buttons in tables and toolbars — use the theme's own button
+   geometry (CSS variables) so size, padding and radius match DashLite. */
+.table .btn,
+.nk-content .btn-sm {
+    --bs-btn-padding-y: .3125rem;
+    --bs-btn-padding-x: .875rem;
+    --bs-btn-font-size: .75rem;
+    --bs-btn-border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.25rem;
+    vertical-align: middle;
+    min-height: 2.125rem;   /* 34px — identical height for every small control */
+    align-self: center;
+}
+.table .btn .icon,
+.table .btn .bi,
+.nk-content .btn-sm .icon,
+.nk-content .btn-sm .bi { font-size: .9375rem; line-height: 1; }
+
+/* Icon-only buttons: same height as text buttons, near-square width */
+.table .btn:has(> .bi:only-child),
+.table .btn:has(> .icon:only-child),
+.table .btn:has(> em:only-child),
+.table .btn:has(> i:only-child) {
+    padding-left: .4375rem;
+    padding-right: .4375rem;
+    min-width: 2.125rem;
+    max-width: 2.125rem;
+}
+
+/* Text buttons in table action columns share one width so rows align vertically.
+   Buttons inside dropdown menus are excluded — they size to the panel, not the row. */
+.table td.text-end .btn:not(.dropdown-menu .btn):not(:has(> .bi:only-child)):not(:has(> .icon:only-child)):not(:has(> em:only-child)):not(:has(> i:only-child)) {
+    min-width: 6rem;
+}
+
+/* Small inputs/selects sitting next to small buttons share the same height */
+.nk-content .form-control-sm,
+.nk-content .form-select-sm {
+    height: 2.125rem;
+    min-height: 2.125rem;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: .8125rem;
+}
+
+/* Native dropdowns: guarantee the selected value is always visible.
+   Fixed height + zero vertical padding lets the browser center the text;
+   explicit color/size defeats any conflicting theme rule. */
+.nk-content select.form-select {
+    height: 2.25rem;
+    min-height: 2.25rem;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: .8125rem;
+    color: #3c4d62;
+    background-color: #fff;
+}
+.nk-content select.form-select-sm {
+    height: 2.125rem;
+    min-height: 2.125rem;
+}
+.nk-content select.form-select option { color: #3c4d62; }
+
+/* Filter/toolbar rows: center controls on one line — but never vertically
+   center forms containing multi-line inputs (textareas), which would make
+   buttons float oddly beside tall fields. */
+.nk-content form.d-flex:not(:has(textarea)) { align-items: center; }
+
+/* ---- Section alignment safeguards (all pages, all roles) ---- */
+/* Avatars never squash when the text beside them wraps */
+.avatar-sm { flex-shrink: 0; }
+/* Long words/URLs wrap inside cards instead of pushing layouts sideways */
+.card { overflow-wrap: break-word; }
+/* Flex children with text content are allowed to shrink and wrap */
+.card .d-flex > div { min-width: 0; }
+/* Consistent breathing room between stacked cards that carry no margin class */
+.nk-content-body > .card + .card { margin-top: 1rem; }
+
+/* Inline action forms: no stray margins, tidy spacing between actions.
+   Scoped to forms sitting directly in the cell — forms inside dropdown
+   menus/popovers must keep their own block layout or their contents overlap. */
+.table td form { margin: 0; }
+.table td > form,
+.table td > .btn-group > form,
+.table td > div:not(.dropdown-menu):not(.btn-group) > form { display: inline-flex; gap: .25rem; align-items: center; }
+.table td .btn + .btn,
+.table td form + .btn,
+.table td .btn + form,
+.table td form + form { margin-left: .25rem; }
+.table td .dropdown-menu form + form,
+.table td .dropdown-menu .btn + .btn { margin-left: 0; }
+
+/* Dropdown action menus in tables: stacked panel layout, immune to the
+   inline-table-form rules above (fixes overlapping Manage menu on Users). */
+.table td .dropdown-menu { white-space: normal; text-align: left; }
+.table td .dropdown-menu form { display: block; }
+.table td .dropdown-menu .btn { min-width: 0; }
+
+/* User Manage menu: explicit flex-column layout with gaps. Flex items cannot
+   overlap the way collapsed/negative block margins can, so no theme rule can
+   smudge one section into another. */
+.user-manage-menu {
+    min-width: 240px;
+    max-width: 280px;
+    /* Never taller than the viewport allows — scroll inside instead of
+       spilling past the page bottom on the table's last rows. */
+    max-height: min(72vh, 32rem);
+    overflow-y: auto;
+}
+/* Native file inputs refuse to shrink below their intrinsic label width;
+   give them the full menu width on their own line instead. */
+.user-manage-menu input[type="file"] { width: 100%; min-width: 0; }
+.manage-sign-preview,
+.profile-sign-preview {
+    display: block;
+    background: #fff;
+    border: 1px dashed #dbdfea;
+    border-radius: 6px;
+    object-fit: contain;
+}
+.manage-sign-preview { height: 40px; max-width: 100%; padding: 2px 8px; align-self: flex-start; }
+.profile-sign-preview { height: 64px; max-width: 240px; padding: 6px 12px; }
+.user-manage-menu form {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .375rem;
+}
+.user-manage-menu form > * { margin: 0; position: static; }
+.user-manage-menu .manage-section-title {
+    display: block;
+    height: auto;
+    overflow: visible;
+    font-size: .6875rem;
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #8094ae;
+    padding: 0;
+}
+.user-manage-menu .manage-inline-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: .25rem;
+}
+.user-manage-menu .form-check { margin-bottom: 0; }
+.user-manage-menu form > .btn { width: 100%; }
+.user-manage-menu .manage-inline-row .form-control { flex: 1 1 auto; }
+.user-manage-menu .manage-inline-row .btn { flex: 0 0 auto; width: auto; }
+
+/* Keep action columns on one line */
+.table td.text-end, .table th.text-end { white-space: nowrap; }
+
+/* Compact inputs/selects used inline in table rows */
+.table .form-control-sm, .table .form-select-sm,
+.table td .form-control, .table td .form-select {
+    padding-top: .25rem;
+    padding-bottom: .25rem;
+    font-size: .8125rem;
+    min-height: unset;
+}
+
+.table .badge { font-size: .6875rem; }
+
+/* ---- Page headings ----
+   DashLite sizes bare h2 at 2.5rem (theme pages use .page-title at 1.5rem instead).
+   Normalize all content headings to the theme's page-title scale. */
+.nk-content h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -.01em; }
+.nk-content h2 { font-size: 1.5rem;  font-weight: 700; letter-spacing: -.01em; }
+.nk-content h3 { font-size: 1.25rem; font-weight: 700; letter-spacing: 0; }
+.nk-content h4 { font-size: 1.1rem;  font-weight: 700; }
+.nk-content h5 { font-size: 1rem;    font-weight: 700; }
+
+/* Badges inside headings stay small and centered */
+.nk-content h1 .badge, .nk-content h2 .badge, .nk-content h3 .badge {
+    font-size: .75rem;
+    vertical-align: middle;
+}
+
+/* Certificate heading size is defined in the certificate section below */
+.certificate-frame h1.cert-heading { font-size: 3rem; }
+
+/* DashLite zeroes .nav-tabs margins — restore breathing room so tab bars
+   never collide with page headers or content */
+.nk-content .nav-tabs { margin-top: .75rem; margin-bottom: 1.25rem; }
+
+/* Page-header action rows: keep buttons off the content below them */
+.nk-content > .d-flex.justify-content-between,
+.nk-content-body > .d-flex.justify-content-between { row-gap: .5rem; }
+
+/* ---- Icon alignment (all pages) ----
+   The app uses two icon fonts (theme Nioicon "ni" and Bootstrap Icons "bi")
+   whose glyphs sit on different baselines. Normalize both everywhere. */
+.nk-content .icon.ni,
+.nk-content em.ni,
+.nk-content .bi {
+    display: inline-block;
+    vertical-align: -0.125em;
+    line-height: 1;
+}
+/* Icons beside heading text: optically centred with the cap height */
+.nk-content h1 > .icon, .nk-content h2 > .icon, .nk-content h3 > .icon,
+.nk-content h4 > .icon, .nk-content h5 > .icon, .nk-content h6 > .icon,
+.nk-content h1 > .bi,  .nk-content h2 > .bi,  .nk-content h3 > .bi,
+.nk-content h4 > .bi,  .nk-content h5 > .bi,  .nk-content h6 > .bi,
+.nk-block-title > .icon, .nk-block-title > .bi {
+    vertical-align: -0.08em;
+    margin-right: .4rem;
+}
+/* Card headers and list items: icon and label on one line, evenly spaced */
+.card-header > .icon, .card-header > .bi,
+.list-group-item > .icon, .list-group-item > .bi {
+    vertical-align: -0.11em;
+    margin-right: .35rem;
+}
+/* Buttons already use inline-flex; centre glyphs exactly */
+.btn .icon, .btn .bi { line-height: 1; vertical-align: middle; }
+
+/* Action clusters: when a <form> (e.g. a delete button) sits beside link-buttons
+   inside a flex row, make it behave exactly like its button siblings so all
+   controls share one line and one vertical centre. */
+.nk-content .d-flex > form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+}
+.nk-content .d-flex.gap-1,
+.nk-content .d-flex.gap-2 { align-items: center; }
+/* Stat cards / display figures keep icons on the text midline */
+.stat-card .icon, .display-6 .icon { vertical-align: -0.06em; }
+
+/* ---- Tab & nav cleanup (DashLite expects anchor tabs; neutralize native button chrome) ---- */
+.nav-tabs .nav-link,
+.nav-pills .nav-link {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+}
+button.nav-link {
+    border: none;
+    background: transparent;
+    font: inherit;
+}
+.nav-tabs { flex-wrap: wrap; }
+.nav-tabs .nav-link { white-space: nowrap; }
+
+/* ---- Responsive behaviour ---- */
+/* Below the widest breakpoint, action columns wrap onto extra lines instead of
+   overflowing their card, and buttons keep tidy spacing when they wrap. */
+@media (max-width: 1650px) {
+    .table td.text-end { white-space: normal; }
+    .table td.text-end .btn,
+    .table td.text-end form { margin-bottom: .25rem; }
+    .table td.text-end .btn:not(:has(> .bi:only-child)):not(:has(> em:only-child)):not(:has(> i:only-child)) {
+        min-width: 0;
+    }
+}
+
+/* Tables inside cards never bleed over neighbouring columns */
+.card .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* On smaller screens, tab bars scroll horizontally instead of colliding/wrapping badly */
+@media (max-width: 991px) {
+    .nk-content .nav-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+    .nk-content .nav-tabs .nav-item { flex-shrink: 0; }
+}
+
+/* Page-header layouts (title left, actions right) always wrap with spacing, never overlap */
+.nk-content-body > .d-flex.justify-content-between,
+.nk-content > .container-fluid > .nk-content-inner > .nk-content-body > .d-flex {
+    flex-wrap: wrap;
+    row-gap: .75rem;
+}
+.nk-block-between { flex-wrap: wrap; row-gap: .75rem; }
+.nk-block-tools { flex-wrap: wrap; }
+
+/* Long titles never push actions off-screen */
+.nk-block-title, .nk-content h2, .nk-content h3 { overflow-wrap: anywhere; }
+
+@media print {
+    .nk-sidebar, .nk-header, .nk-footer, .no-print { display: none !important; }
+    .nk-content { padding: 0 !important; }
+    .nk-wrap { padding-left: 0 !important; }
+    body { background: #fff; }
+}
+
+/* Tenant identity in the top header: the signed-in user's organisation name,
+   shown beside the brand so every page carries the organisation's identity. */
+.nk-header-org {
+    font-size: .9375rem;
+    font-weight: 700;
+    color: #364a63;
+    letter-spacing: .01em;
+    max-width: 34rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: .25rem;
+}
+
+/* DashLite defines .gap/.gap-1…5 as fixed-height SPACER blocks (.gap-2 = height:.75rem),
+   which collides with Bootstrap's flex gap utility names used on flex containers all
+   over the views: the flex container collapses to the spacer height and its children
+   spill over whatever follows (e.g. the Training Calendar toolbar overlapping the
+   month grid). Restore proper flex-gap semantics whenever the class sits on a flex
+   container; DashLite's standalone spacer <div class="gap-*"> elements are unaffected. */
+.d-flex.gap-0, .d-inline-flex.gap-0 { height: auto; width: auto; gap: 0; }
+.d-flex.gap-1, .d-inline-flex.gap-1 { height: auto; width: auto; gap: .25rem; }
+.d-flex.gap-2, .d-inline-flex.gap-2 { height: auto; width: auto; gap: .5rem; }
+.d-flex.gap-3, .d-inline-flex.gap-3 { height: auto; width: auto; gap: 1rem; }
+.d-flex.gap-4, .d-inline-flex.gap-4 { height: auto; width: auto; gap: 1.5rem; }
+.d-flex.gap-5, .d-inline-flex.gap-5 { height: auto; width: auto; gap: 3rem; }
+
+
+/* Certificate signatures: uploaded (or placeholder) signature image sits on the
+   signature line; sized like a real ink signature and kept in print output. */
+.cert-sign-img {
+    display: block;
+    height: 46px;
+    max-width: 200px;
+    object-fit: contain;
+    margin: 0 auto -8px;
+}
+@media print { .cert-sign-img { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

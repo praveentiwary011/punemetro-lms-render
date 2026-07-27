@@ -1,0 +1,91 @@
+@using LMS.Web.Services.Setup
+@model SetupWizardState
+@{
+    Layout = "_Wizard";
+    ViewData["Title"] = "AI grading";
+}
+<h1>AI grading of written answers</h1>
+<p class="sub">The LMS can mark free-text exam answers automatically, using a Qwen&nbsp;2.5 model running <strong>on this server</strong> — no external service and no per-use cost. Answers never leave your infrastructure.</p>
+
+<form method="post" asp-action="SaveGrading" id="gradeForm">
+    @Html.AntiForgeryToken()
+
+    <div class="fld">
+        <label class="lbl">Local model server (Ollama) address</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <input type="text" name="ollamaUrl" id="ollamaUrl" value="@Model.OllamaUrl" style="flex:1 1 260px" />
+            <button type="button" class="btn btn-ghost" id="detectBtn">Detect</button>
+        </div>
+        <div class="hint" id="detectResult">Click <em>Detect</em> to check the model server and which models are installed.</div>
+    </div>
+
+    <label class="lbl" style="margin-top:16px">Grading profile — match your server hardware</label>
+    <div class="opts">
+        <label class="opt" data-mode="Cpu">
+            <input type="radio" name="gradingMode" value="Cpu" @(Model.GradingMode == LMS.Web.Models.GradingMode.Gpu ? "" : "checked") />
+            <span class="name">CPU <span class="tag">Default</span></span>
+            <div class="desc">Qwen&nbsp;2.5 7B, graded in the background — trainees see “Assessment Pending” until the score is ready. For servers without a GPU.</div>
+        </label>
+        <label class="opt" data-mode="Gpu">
+            <input type="radio" name="gradingMode" value="Gpu" @(Model.GradingMode == LMS.Web.Models.GradingMode.Gpu ? "checked" : "") />
+            <span class="name">GPU</span>
+            <div class="desc">Qwen&nbsp;2.5 14B, graded instantly — the score appears on submit. Requires an NVIDIA GPU.</div>
+        </label>
+    </div>
+
+    <label class="chk">
+        <input type="checkbox" name="gradingEnabled" value="true" checked />
+        <span>
+            <strong>Enable automatic grading of written answers</strong>
+            <div class="hint">Leave this on. If the model server isn't ready yet, the LMS installs fine and simply holds written answers as “Assessment Pending” until it is.</div>
+        </span>
+    </label>
+
+    <div class="actions">
+        <a class="back" asp-action="Administrator">← Back</a>
+        <button type="submit" class="btn btn-primary">Continue</button>
+    </div>
+</form>
+
+@section Scripts {
+<script nonce="@Context.CspNonce()">
+    (function () {
+        var opts = Array.prototype.slice.call(document.querySelectorAll('.opt'));
+        function apply() {
+            var v = document.querySelector('input[name=gradingMode]:checked').value;
+            opts.forEach(function (o) { o.classList.toggle('sel', o.getAttribute('data-mode') === v); });
+        }
+        document.getElementById('gradeForm').addEventListener('change', function (e) {
+            if (e.target.name === 'gradingMode') apply();
+        });
+        apply();
+
+        document.getElementById('detectBtn').addEventListener('click', function () {
+            var out = document.getElementById('detectResult');
+            out.textContent = 'Checking…'; out.className = 'hint';
+            var fd = new FormData(); fd.append('url', document.getElementById('ollamaUrl').value);
+            fetch('@Url.Action("TestOllama", "Setup")', { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    if (!j.ok) {
+                        out.className = 'result bad';
+                        out.textContent = '✗ Not reachable: ' + j.message + ' — you can still continue; grading starts working once the model server is running.';
+                        return;
+                    }
+                    var missing = [];
+                    if (!j.hasGrader) missing.push('qwen2.5 (grading model)');
+                    if (!j.hasEmbed) missing.push('nomic-embed-text (search model)');
+                    if (missing.length === 0) {
+                        out.className = 'result ok';
+                        out.textContent = '✓ Connected. Required models are installed (' + j.models.join(', ') + ').';
+                    } else {
+                        out.className = 'result';
+                        out.innerHTML = '✓ Connected, but these models are not installed yet: <strong>' + missing.join(', ') +
+                            '</strong>. They download automatically on first use, or run: <code>ollama pull qwen2.5:7b-instruct</code>';
+                    }
+                })
+                .catch(function () { out.className = 'result bad'; out.textContent = '✗ Check failed to run.'; });
+        });
+    })();
+</script>
+}

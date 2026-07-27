@@ -1,0 +1,67 @@
+@model List<Course>
+@{
+    ViewData["Title"] = "Manage courses";
+    var instructors = (IList<ApplicationUser>)ViewBag.Instructors;
+    var categories = (List<Category>)ViewBag.Categories;
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-collection me-2"></i>Courses</h2>
+    <div class="d-flex gap-2">
+        <form method="post" asp-action="AddCategory" class="d-flex gap-1">
+            @Html.AntiForgeryToken()
+            <input name="name" class="form-control form-control-sm" placeholder="New category" required />
+            <button class="btn btn-sm btn-outline-primary">Add</button>
+        </form>
+        <a class="btn btn-primary btn-sm" asp-controller="Instructor" asp-action="CreateCourse"><i class="bi bi-plus-lg me-1"></i>New course</a>
+    </div>
+</div>
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Course</th><th>Category</th><th>Instructor</th><th>Enrolled</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+        <tbody>
+        @foreach (var c in Model)
+        {
+            <tr>
+                <td><strong>@c.Code</strong> — @c.Title</td>
+                <td>@(c.Category?.Name ?? "—")</td>
+                <td>
+                    <form method="post" asp-action="ReassignInstructor" class="d-flex gap-1">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@c.Id" />
+                        <select name="instructorId" class="form-select form-select-sm" style="max-width:180px">
+                            @foreach (var i in instructors)
+                            {
+                                if (i.Id == c.InstructorId) { <option selected value="@i.Id">@i.FullName</option> }
+                                else { <option value="@i.Id">@i.FullName</option> }
+                            }
+                        </select>
+                        <button class="btn btn-sm btn-outline-secondary" title="Reassign"><i class="bi bi-check"></i></button>
+                    </form>
+                </td>
+                <td>@c.Enrollments.Count / @c.MaxEnrollment</td>
+                <td>
+                    @if (!c.IsPublished) { <span class="badge text-bg-warning">Draft</span> }
+                    else if (!c.IsActive) { <span class="badge text-bg-danger">Deactivated</span> }
+                    else { <span class="badge text-bg-success">Published</span> }
+                </td>
+                <td class="text-end">
+                    <div class="d-flex justify-content-end align-items-center gap-1 flex-nowrap">
+                        <a class="btn btn-sm @(c.IsPublished ? "btn-outline-primary" : "btn-warning") text-nowrap" asp-controller="Instructor" asp-action="ManageCourse" asp-route-id="@c.Id">@(c.IsPublished ? "Open" : "Continue building")</a>
+                        <form method="post" asp-action="TogglePublish" class="m-0">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@c.Id" />
+                            <button class="btn btn-sm btn-outline-secondary">@(c.IsPublished ? "Unpublish" : "Publish")</button>
+                        </form>
+                        <form method="post" asp-action="DeleteCourse" class="m-0" data-confirm="Delete this course and all its content?">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@c.Id" />
+                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

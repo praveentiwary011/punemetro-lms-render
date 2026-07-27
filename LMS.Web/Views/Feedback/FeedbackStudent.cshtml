@@ -1,0 +1,66 @@
+@model List<CourseFeedback>
+@{
+    ViewData["Title"] = "Course Feedback";
+    var enrollments = (List<Enrollment>)ViewBag.Enrollments;
+}
+<h2 class="mb-4"><em class="icon ni ni-star me-2"></em>Course Feedback</h2>
+
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card p-4">
+            <h6 class="mb-3">Rate a course</h6>
+            @if (!enrollments.Any())
+            {
+                <p class="text-muted mb-0">Enroll in a course to leave feedback.</p>
+            }
+            else
+            {
+                <form method="post" asp-action="Submit">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-2">
+                        <select name="courseId" class="form-select" required>
+                            <option value="">Select course…</option>
+                            @foreach (var e in enrollments)
+                            {
+                                <option value="@e.CourseId">@e.Course?.Code — @e.Course?.Title</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <select name="rating" class="form-select">
+                            <option value="5">★★★★★ Excellent</option>
+                            <option value="4">★★★★ Good</option>
+                            <option value="3">★★★ Average</option>
+                            <option value="2">★★ Poor</option>
+                            <option value="1">★ Very poor</option>
+                        </select>
+                    </div>
+                    <div class="mb-3"><textarea name="comments" class="form-control" rows="3" placeholder="What worked well? What could improve?"></textarea></div>
+                    <button class="btn btn-primary">Submit feedback</button>
+                </form>
+            }
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">My feedback</div>
+            <ul class="list-group list-group-flush">
+                @if (!Model.Any())
+                {
+                    <li class="list-group-item text-muted">You haven't submitted feedback yet.</li>
+                }
+                @foreach (var f in Model)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <strong>@f.Course?.Code — @f.Course?.Title</strong>
+                            <span class="text-warning">@(new string('★', f.Rating))@(new string('☆', 5 - f.Rating))</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(f.Comments)) { <div class="small text-muted">@f.Comments</div> }
+                        <div class="small text-muted">@f.SubmittedAt.ToString("MMM d, yyyy")</div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,56 @@
+@model List<Faq>
+@{
+    ViewData["Title"] = "FAQs";
+    bool canManage = ViewBag.CanManage;
+}
+<h2 class="mb-4"><em class="icon ni ni-help-fill me-2"></em>Frequently Asked Questions</h2>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="accordion" id="faqAccordion">
+            @if (!Model.Any())
+            {
+                <p class="text-muted">No FAQs published yet.</p>
+            }
+            @{ int i = 0; }
+            @foreach (var f in Model)
+            {
+                i++;
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button @(i > 1 ? "collapsed" : "")" data-bs-toggle="collapse" data-bs-target="#faq-@f.Id">
+                            @f.Question
+                        </button>
+                    </h2>
+                    <div id="faq-@f.Id" class="accordion-collapse collapse @(i == 1 ? "show" : "")" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body d-flex justify-content-between align-items-start">
+                            <div>@f.Answer</div>
+                            @if (canManage)
+                            {
+                                <form method="post" asp-action="DeleteFaq">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@f.Id" />
+                                    <button class="btn btn-sm btn-outline-danger ms-3"><em class="icon ni ni-trash"></em></button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+    @if (canManage)
+    {
+        <div class="col-lg-4">
+            <div class="card p-4">
+                <h6 class="mb-3">Add FAQ</h6>
+                <form method="post" asp-action="AddFaq">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-2"><input name="question" class="form-control" placeholder="Question" required /></div>
+                    <div class="mb-3"><textarea name="answer" class="form-control" rows="3" placeholder="Answer" required></textarea></div>
+                    <button class="btn btn-primary">Add</button>
+                </form>
+            </div>
+        </div>
+    }
+</div>

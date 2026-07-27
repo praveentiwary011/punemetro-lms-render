@@ -1,0 +1,49 @@
+@model List<RetakeRequest>
+@{
+    ViewData["Title"] = "Retake Requests";
+}
+<h2 class="mb-4"><em class="icon ni ni-repeat me-2"></em>Retake Requests</h2>
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Trainee</th><th>Assessment</th><th>Reason</th><th>Requested</th><th>Status</th><th style="min-width:280px"></th></tr></thead>
+        <tbody>
+        @if (!Model.Any())
+        {
+            <tr><td colspan="6" class="text-muted">No retake requests.</td></tr>
+        }
+        @foreach (var r in Model)
+        {
+            <tr>
+                <td>@r.Student?.FullName</td>
+                <td>@r.Quiz?.Course?.Code — @r.Quiz?.Title</td>
+                <td class="small text-muted" style="max-width:240px">@r.Reason</td>
+                <td class="small">@r.RequestedAt.ToString("MMM d")</td>
+                <td>
+                    @switch (r.Status)
+                    {
+                        case RetakeStatus.Approved: <span class="badge text-bg-success">Approved</span>; break;
+                        case RetakeStatus.Rejected: <span class="badge text-bg-danger">Rejected</span>; break;
+                        default: <span class="badge text-bg-warning">Pending</span>; break;
+                    }
+                </td>
+                <td>
+                    @if (r.Status == RetakeStatus.Pending && (User.IsInRole("Admin") || User.IsInRole("Instructor")))
+                    {
+                        <form method="post" asp-action="DecideRetake" class="d-flex gap-1">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@r.Id" />
+                            <input name="note" class="form-control form-control-sm" placeholder="Note (optional)" />
+                            <button name="approve" value="true" class="btn btn-sm btn-success">Approve</button>
+                            <button name="approve" value="false" class="btn btn-sm btn-outline-danger">Reject</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <span class="small text-muted">@r.DecisionNote</span>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
