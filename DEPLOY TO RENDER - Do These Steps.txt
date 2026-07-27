@@ -1,0 +1,103 @@
+===================================================================
+   GET THE DEMO LIVE ON www.absolutesys.in  -  RENDER (FREE)
+===================================================================
+
+This folder is ALREADY fully prepared and tested. It is set up so
+that once it is online, it shows the ready-to-use demo (with the
+sign-in accounts) automatically - you do NOT need to add any
+settings in Render. Just follow the steps below.
+
+You will do three short things:
+   PART 1  put this folder on GitHub   (~5 min)
+   PART 2  switch it on with Render     (~10 min, mostly waiting)
+   PART 3  connect your GoDaddy domain  (~5 min + a short wait)
+
+
+-------------------------------------------------------------------
+   PART 1  -  Put this folder on GitHub
+-------------------------------------------------------------------
+   1. If you do not have a GitHub account: go to  github.com  and
+      click "Sign up" (free - just email and a password).
+   2. Download "GitHub Desktop" from  desktop.github.com , install
+      it, and sign in with your GitHub account.
+   3. In GitHub Desktop:  File  ->  Add Local Repository.
+   4. Click "Choose..." and select this folder:
+            Desktop / punemetro-lms-render
+      (It is already a repository, so it will be added straight away.)
+   5. Click the "Publish repository" button (top right).
+      - Name it:  punemetro-lms
+      - You may leave "Keep this code private" ticked or unticked.
+      - Click "Publish repository".
+   >> Your code is now on GitHub. Done with Part 1.
+
+
+-------------------------------------------------------------------
+   PART 2  -  Switch it on with Render
+-------------------------------------------------------------------
+   1. Go to  render.com  and click "Get Started".
+      Choose "Sign in with GitHub" and click "Authorize".
+   2. Click "New +"  (top right)  ->  "Web Service".
+   3. Find "punemetro-lms" in the list and click "Connect".
+   4. Render reads the setup automatically. Just set:
+         - Name:          punemetro-lms
+                          (this becomes punemetro-lms.onrender.com)
+         - Region:        choose the one nearest you (e.g. Singapore)
+         - Instance Type: choose  Free
+      (You do NOT need to add any Environment Variables - it is all
+       built in already.)
+   5. Click "Create Web Service" at the bottom.
+   6. The first build takes about 5-15 minutes (you can watch the
+      text scroll). When the top of the page shows  "Live", click
+      the  .onrender.com  web address it gives you.
+   >> You should see the Pune Metro LMS sign-in page. Sign in with
+      any account at the bottom of this page. Done with Part 2.
+
+
+-------------------------------------------------------------------
+   PART 3  -  Connect www.absolutesys.in
+-------------------------------------------------------------------
+   1. In Render, open your service ->  "Settings"  ->  scroll to
+      "Custom Domains"  ->  "Add Custom Domain".
+   2. Type:   www.absolutesys.in    and click Save.
+      Render shows a "target" address - keep this tab open.
+   3. In a new tab, sign in to GoDaddy ->  My Products  ->  next to
+      absolutesys.in click  "DNS".
+   4. Click "Add New Record" and enter:
+         Type:  CNAME
+         Name:  www
+         Value: (paste the target Render showed you)
+         TTL:   leave as default
+      Click Save.
+   5. Go back to the Render tab and wait a few minutes. When it
+      shows a green tick, Render has set up the free HTTPS padlock.
+   6. (Optional) To make the plain "absolutesys.in" work too:
+      in GoDaddy choose  Forwarding -> Domain -> Add  and forward
+      absolutesys.in  to  https://www.absolutesys.in
+
+   >> Visit  https://www.absolutesys.in  - the demo is live!
+
+
+-------------------------------------------------------------------
+   SIGN-IN ACCOUNTS   (password for all:  Pass@123 )
+-------------------------------------------------------------------
+   Platform Super User   superuser@absolutesys.in
+   Administrator         admin@punemetro.in
+   Principal             principal@punemetro.in
+   Trainer               trainer@punemetro.in
+   Trainee               trainee@punemetro.in
+
+
+-------------------------------------------------------------------
+   GOOD TO KNOW
+-------------------------------------------------------------------
+   - This is the FREE plan: the site "sleeps" after ~15 minutes with
+     no visitors, so the first visit after a quiet spell takes about
+     a minute to wake up. That is normal.
+   - Because it is a demo, anything a visitor types is reset when the
+     site sleeps - so every visitor always sees a clean, fully
+     populated demo. (For a version that KEEPS data, use the Oracle
+     option in "Free-Hosting-Guide.html".)
+   - To update the demo later: put the new files in this folder,
+     then in GitHub Desktop click "Commit" and "Push" - Render
+     rebuilds and updates the site automatically.
+===================================================================
