@@ -15,6 +15,7 @@
 <h1>Review &amp; install</h1>
 <p class="sub">Everything is ready. Check the summary, then install — it takes a few seconds.</p>
 
+<div class="table-responsive">
 <table class="sum">
     <tr><td class="k">Database</td><td><strong>@ProviderLabel(Db.Provider)</strong></td></tr>
     <tr><td class="k">Organisation</td><td><strong>@Model.OrgName</strong> (@Model.OrgCode)</td></tr>
@@ -22,6 +23,7 @@
     <tr><td class="k">Administrator</td><td>@Model.AdminName — @Model.AdminEmail@(Model.AdminIsSuperUser ? " (platform Super User)" : "")</td></tr>
     <tr><td class="k">AI grading</td><td>@(Model.GradingEnabled ? $"Enabled · {(Model.GradingMode == LMS.Web.Models.GradingMode.Gpu ? "GPU (Qwen 2.5 14B)" : "CPU (Qwen 2.5 7B)")}" : "Disabled")<div class="hint">@Model.OllamaUrl</div></td></tr>
 </table>
+</div>
 
 <form method="post" asp-action="Install" style="margin-top:18px">
     @Html.AntiForgeryToken()

@@ -277,6 +277,7 @@
                 <span>Users in @Model.Name</span>
                 <a class="btn btn-sm btn-outline-primary" asp-action="Users" asp-route-organisationId="@Model.Id">Manage users</a>
             </div>
+            <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th></tr></thead>
                 <tbody>
@@ -298,6 +299,7 @@
                 }
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>

@@ -14,6 +14,7 @@
     pass rate @((submitted.Count == 0 ? 0 : (double)submitted.Count(a => a.MaxScore > 0 && a.Score / a.MaxScore * 100 >= Model.PassingScore) / submitted.Count * 100).ToString("0.#"))%
 </p>
 <div class="card" style="max-width:900px">
+    <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
         <thead><tr><th>Student</th><th>Attempt</th><th>Submitted</th><th>Score</th><th>Result</th></tr></thead>
         <tbody>
@@ -37,4 +38,5 @@
         }
         </tbody>
     </table>
+    </div>
 </div>

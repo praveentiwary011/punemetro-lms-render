@@ -18,6 +18,7 @@
     <input type="hidden" name="courseId" value="@Model.Id" />
     <input type="hidden" name="date" value="@date.ToString("yyyy-MM-dd")" />
     <div class="card" style="max-width:720px">
+        <div class="table-responsive">
         <table class="table align-middle mb-0">
             <thead><tr><th>Student</th><th>Status for @date.ToString("MMM d, yyyy")</th></tr></thead>
             <tbody>
@@ -39,6 +40,7 @@
             }
             </tbody>
         </table>
+        </div>
         <div class="card-body">
             <button class="btn btn-primary">Save attendance</button>
         </div>
