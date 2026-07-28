@@ -27,6 +27,7 @@
 }
 
 <div class="card">
+    <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
         <thead><tr><th>Course</th><th>Author</th><th>Category</th><th>Enrolled</th><th>Status</th><th class="text-end">Access</th></tr></thead>
         <tbody>
@@ -62,24 +63,24 @@
                         @if (!mine && !isOversight)
                         {
                             <span class="badge text-bg-success-subtle text-success-emphasis border border-success-subtle me-1" title="An Admin or Principal approved your request">
-                                <i class="bi bi-key me-1"></i>Access granted
+                                <i class="bi bi-key me-1"></i><span>Access granted</span>
                             </span>
                         }
                         <a class="btn btn-sm btn-outline-primary" asp-action="ManageCourse" asp-route-id="@c.Id">
-                            <i class="bi bi-pencil-square me-1"></i>Manage
+                            <i class="bi bi-pencil-square me-1"></i><span>Manage</span>
                         </a>
                     }
                     else if (pending.Contains(c.Id))
                     {
                         <span class="badge text-bg-info-subtle text-info-emphasis border border-info-subtle">
-                            <i class="bi bi-hourglass-split me-1"></i>Request pending
+                            <i class="bi bi-hourglass-split me-1"></i><span>Request pending</span>
                         </span>
                     }
                     else
                     {
                         <button class="btn btn-sm btn-outline-secondary" type="button"
                                 data-bs-toggle="collapse" data-bs-target="#req-@c.Id" aria-expanded="false">
-                            <i class="bi bi-unlock me-1"></i>Request edit access
+                            <i class="bi bi-unlock me-1"></i><span>Request edit access</span>
                         </button>
                     }
                 </td>
@@ -102,4 +103,5 @@
         }
         </tbody>
     </table>
+    </div>
 </div>
