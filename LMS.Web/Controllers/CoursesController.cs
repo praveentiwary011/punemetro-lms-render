@@ -11,7 +11,13 @@ namespace LMS.Web.Controllers;
 public class CoursesController : Controller
 {
     private readonly AppDbContext _db;
-    public CoursesController(AppDbContext db) => _db = db;
+    private readonly Services.Email.EmailQueue _emailQueue;
+    private readonly Services.Email.MailSettingsStore _mailSettings;
+    private readonly ILogger<CoursesController> _log;
+
+    public CoursesController(AppDbContext db, Services.Email.EmailQueue emailQueue,
+        Services.Email.MailSettingsStore mailSettings, ILogger<CoursesController> log)
+    { _db = db; _emailQueue = emailQueue; _mailSettings = mailSettings; _log = log; }
 
     /// <summary>Multi-tenancy: signed-in non-admin users see their own organisation's
     /// courses plus shared (no-organisation) ones; Admins and anonymous visitors see all.</summary>
@@ -123,13 +129,41 @@ public class CoursesController : Controller
         }
         else
         {
-            _db.Enrollments.Add(new Enrollment { CourseId = id, StudentId = uid });
+            var enrollment = new Enrollment { CourseId = id, StudentId = uid };
+            _db.Enrollments.Add(enrollment);
             Notifier.Notify(_db, course.InstructorId, $"New enrollment in {course.Title}.", $"/Instructor/ManageCourse/{id}");
             Notifier.Audit(_db, uid, User.Identity!.Name ?? "", "Enroll", course.Title);
             await _db.SaveChangesAsync();
+            await QueueEnrolmentEmailAsync(course, uid, enrollment.Id);
             TempData["Ok"] = $"Enrolled in {course.Title}!";
         }
         return RedirectToAction("Details", new { id });
+    }
+
+    /// <summary>Queues the enrolment confirmation (§NOT-05). Queuing only — the message
+    /// is delivered by the dispatch worker, so mail problems never surface as an enrolment
+    /// failure. Any error here is swallowed for the same reason: the learner IS enrolled,
+    /// and that must not be undone because an email could not be composed.</summary>
+    private async Task QueueEnrolmentEmailAsync(Course course, string userId, int enrollmentId)
+    {
+        try
+        {
+            var user = await _db.Users.IgnoreQueryFilters()
+                .Where(u => u.Id == userId)
+                .Select(u => new { u.Email, u.FullName, u.OrganisationId, OrgName = u.Organisation!.Name })
+                .FirstOrDefaultAsync();
+            if (user?.Email == null) return;
+
+            var baseUrl = (await _mailSettings.LoadAsync()).BaseUrl;
+            var (subject, html) = Services.Email.EmailTemplates.EnrollmentConfirmed(
+                user.OrgName ?? "", user.FullName, course, baseUrl);
+            await _emailQueue.EnqueueAsync(user.Email, user.FullName, subject, html,
+                EmailKind.EnrollmentConfirmed, $"enrol:{enrollmentId}", user.OrganisationId);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not queue enrolment email for course {CourseId}", course.Id);
+        }
     }
 
     [HttpPost, ValidateAntiForgeryToken]

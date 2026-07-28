@@ -66,6 +66,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SubscriptionLicense> SubscriptionLicenses => Set<SubscriptionLicense>();
     public DbSet<SsoConfiguration> SsoConfigurations => Set<SsoConfiguration>();
     public DbSet<CourseEditRequest> CourseEditRequests => Set<CourseEditRequest>();
+    public DbSet<EmailOutbox> EmailOutbox => Set<EmailOutbox>();
     public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
     public DbSet<SubjectiveGradeResult> SubjectiveGradeResults => Set<SubjectiveGradeResult>();
     public DbSet<SubjectiveGradingReview> SubjectiveGradingReviews => Set<SubjectiveGradingReview>();
@@ -187,6 +188,18 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         // The permission lookup on every course-edit action filters by all three.
         builder.Entity<CourseEditRequest>()
             .HasIndex(r => new { r.CourseId, r.TrainerId, r.Status });
+
+        // ---- Email notifications (§NOT-05..07) ----
+        builder.Entity<EmailOutbox>()
+            .HasOne(e => e.Organisation).WithMany()
+            .HasForeignKey(e => e.OrganisationId).OnDelete(DeleteBehavior.SetNull);
+        // The guard against double-sending: two attempts to queue the same logical
+        // message collide here and the second is discarded.
+        builder.Entity<EmailOutbox>()
+            .HasIndex(e => e.DedupeKey).IsUnique();
+        // The dispatch worker's query: unsent rows, oldest first.
+        builder.Entity<EmailOutbox>()
+            .HasIndex(e => new { e.SentAt, e.CreatedAt });
 
         // ---- Subjective auto-grading (§AIG) ----
         builder.Entity<KnowledgeChunk>()

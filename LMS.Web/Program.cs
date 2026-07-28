@@ -137,6 +137,18 @@ builder.Services.AddResponseCompression(options => options.EnableForHttps = true
 // Subscription-license expiry reminders (first at T-2 months, then weekly)
 builder.Services.AddHostedService<LMS.Web.Services.LicenseExpiryNotifier>();
 
+// ---- Email notifications (§NOT-05..07) ----
+// Nothing sends mail inline: callers queue into EmailOutbox and the dispatch
+// worker delivers, so a slow or unreachable SMTP server can never delay or fail
+// the user action that triggered the message.
+builder.Services.AddScoped<LMS.Web.Services.Email.MailSettingsStore>();
+builder.Services.AddScoped<LMS.Web.Services.Email.EmailQueue>();
+builder.Services.AddScoped<LMS.Web.Services.Email.NewCourseDigestJob>();
+builder.Services.AddScoped<LMS.Web.Services.Email.UpcomingReminderJob>();
+builder.Services.AddHostedService<LMS.Web.Services.Email.EmailDispatchWorker>();
+builder.Services.AddHostedService<LMS.Web.Services.Email.WeeklyNewCoursesNotifier>();
+builder.Services.AddHostedService<LMS.Web.Services.Email.UpcomingCourseReminder>();
+
 // Subjective auto-grading (§AIG): local Ollama/Qwen 2.5 grading + retrieval index.
 builder.Services.AddHttpClient<LMS.Web.Services.Grading.IOllamaClient, LMS.Web.Services.Grading.OllamaClient>();
 builder.Services.AddScoped<LMS.Web.Services.Grading.GradingOptions>();

@@ -48,6 +48,21 @@ public static class SchemaUpgrader
             AllowLocalPassword {intc} NOT NULL,
             UpdatedAt {dt} NOT NULL)", ifNotExistsHandled: sqlite);
 
+        Run(db, log, $@"CREATE TABLE IF NOT EXISTS EmailOutbox (
+            Id {pk},
+            ToAddress {txt} NOT NULL,
+            ToName {txt} NOT NULL,
+            Subject {txt} NOT NULL,
+            HtmlBody {txt} NOT NULL,
+            Kind {intc} NOT NULL,
+            DedupeKey {txt} NULL,
+            OrganisationId {intc} NULL,
+            CreatedAt {dt} NOT NULL,
+            SentAt {dt} NULL,
+            Attempts {intc} NOT NULL DEFAULT 0,
+            LastAttemptAt {dt} NULL,
+            LastError {txt} NULL)", ifNotExistsHandled: sqlite);
+
         Run(db, log, $@"CREATE TABLE IF NOT EXISTS CourseEditRequests (
             Id {pk},
             CourseId {intc} NOT NULL,
@@ -99,6 +114,8 @@ public static class SchemaUpgrader
 
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_KnowledgeChunks_Org_Course ON KnowledgeChunks (OrganisationId, CourseId)", ifNotExistsHandled: true);
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_CourseEditRequests_Course_Trainer_Status ON CourseEditRequests (CourseId, TrainerId, Status)", ifNotExistsHandled: true);
+        Run(db, log, "CREATE UNIQUE INDEX IF NOT EXISTS IX_EmailOutbox_DedupeKey ON EmailOutbox (DedupeKey)", ifNotExistsHandled: true);
+        Run(db, log, "CREATE INDEX IF NOT EXISTS IX_EmailOutbox_Sent_Created ON EmailOutbox (SentAt, CreatedAt)", ifNotExistsHandled: true);
     }
 
     private static void Run(AppDbContext db, ILogger log, string sql, bool ifNotExistsHandled = false)

@@ -18,12 +18,115 @@ public class AdminController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
 
-    public AdminController(AppDbContext db, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IWebHostEnvironment env)
+    private readonly Services.Email.MailSettingsStore _mail;
+    private readonly Services.Email.EmailQueue _emailQueue;
+
+    public AdminController(AppDbContext db, UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager,
+        IWebHostEnvironment env, Services.Email.MailSettingsStore mail, Services.Email.EmailQueue emailQueue)
     {
         _db = db;
         _userManager = userManager;
         _roleManager = roleManager;
         _env = env;
+        _mail = mail;
+        _emailQueue = emailQueue;
+    }
+
+    // ---------- Email notifications (§NOT-05..07) ----------
+
+    public async Task<IActionResult> MailSettings()
+    {
+        var s = await _mail.LoadAsync();
+        ViewBag.HasPassword = !string.IsNullOrEmpty(s.Password);
+        ViewBag.Queued = await _db.EmailOutbox.CountAsync(e => e.SentAt == null);
+        ViewBag.Sent = await _db.EmailOutbox.CountAsync(e => e.SentAt != null);
+        ViewBag.Failing = await _db.EmailOutbox
+            .Where(e => e.SentAt == null && e.LastError != null)
+            .OrderByDescending(e => e.LastAttemptAt).Take(5).ToListAsync();
+        return View(s);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveMailSettings(bool enabled, string host, int port, bool useStartTls,
+        string? user, string? password, string fromAddress, string? fromName, string? baseUrl)
+    {
+        if (enabled && (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(fromAddress)))
+        {
+            TempData["Err"] = "A mail server and a From address are required before notifications can be enabled.";
+            return RedirectToAction("MailSettings");
+        }
+
+        var values = new Dictionary<string, string>
+        {
+            [Services.Email.MailSettingsStore.KeyEnabled] = enabled ? "true" : "false",
+            [Services.Email.MailSettingsStore.KeyHost] = (host ?? "").Trim(),
+            [Services.Email.MailSettingsStore.KeyPort] = (port <= 0 ? 587 : port).ToString(),
+            [Services.Email.MailSettingsStore.KeyStartTls] = useStartTls ? "true" : "false",
+            [Services.Email.MailSettingsStore.KeyUser] = (user ?? "").Trim(),
+            [Services.Email.MailSettingsStore.KeyFromAddress] = (fromAddress ?? "").Trim(),
+            [Services.Email.MailSettingsStore.KeyFromName] = (fromName ?? "").Trim(),
+            [Services.Email.MailSettingsStore.KeyBaseUrl] = (baseUrl ?? "").Trim().TrimEnd('/')
+        };
+        // Blank means "keep the stored password" — it is never sent back to the browser,
+        // so an empty field cannot be taken as an instruction to clear it.
+        if (!string.IsNullOrEmpty(password))
+            values[Services.Email.MailSettingsStore.KeyPassword] = _mail.Protect(password);
+
+        await _mail.SaveAsync(values);
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "", "UpdateMailSettings",
+            enabled ? $"enabled: {host}:{port}" : "disabled");
+        await _db.SaveChangesAsync();
+        TempData["Ok"] = "Mail settings saved.";
+        return RedirectToAction("MailSettings");
+    }
+
+    /// <summary>Runs a scheduled digest immediately instead of waiting for its slot.
+    /// The jobs are idempotent — the outbox dedupe key means a learner who already has
+    /// this week's digest (or tomorrow's reminder) queued will not get a second one —
+    /// so this is safe to press more than once.</summary>
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RunEmailJob(string job,
+        [FromServices] Services.Email.NewCourseDigestJob weekly,
+        [FromServices] Services.Email.UpcomingReminderJob reminders)
+    {
+        var queued = job == "weekly"
+            ? await weekly.RunAsync(HttpContext.RequestAborted, ignoreSchedule: true)
+            : await reminders.RunAsync(HttpContext.RequestAborted, ignoreSchedule: true);
+
+        var what = job == "weekly" ? "New-course digest" : "Day-before reminders";
+        TempData["Ok"] = queued == 0
+            ? $"{what}: nothing to send right now."
+            : $"{what}: {queued} message(s) queued.";
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "", "RunEmailJob", $"{job}: {queued} queued");
+        await _db.SaveChangesAsync();
+        return RedirectToAction("MailSettings");
+    }
+
+    /// <summary>Queues one test message to the address given. It goes through the same
+    /// outbox and worker as everything else, so a success here proves the whole path.</summary>
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendTestEmail(string to)
+    {
+        var s = await _mail.LoadAsync();
+        if (!s.IsUsable)
+        {
+            TempData["Err"] = "Configure and enable the mail server first.";
+            return RedirectToAction("MailSettings");
+        }
+        if (string.IsNullOrWhiteSpace(to))
+        {
+            TempData["Err"] = "Enter an address to send the test to.";
+            return RedirectToAction("MailSettings");
+        }
+
+        var orgId = await CallerOrganisationIdAsync();
+        var orgName = orgId == null ? "" :
+            await _db.Organisations.Where(o => o.Id == orgId).Select(o => o.Name).FirstOrDefaultAsync() ?? "";
+        var (subject, html) = Services.Email.EmailTemplates.Test(orgName);
+        await _emailQueue.EnqueueAsync(to.Trim(), "", subject, html, EmailKind.Test, null, orgId);
+
+        TempData["Ok"] = $"Test message queued for {to.Trim()} — it is sent within a minute.";
+        return RedirectToAction("MailSettings");
     }
     private readonly IWebHostEnvironment _env;
 
