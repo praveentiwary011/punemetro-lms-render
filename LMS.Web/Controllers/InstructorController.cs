@@ -186,7 +186,12 @@ public class InstructorController : Controller
             return RedirectToAction("ManageCourse", new { id });
         }
         course.IsPublished = !course.IsPublished;
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "",
+            course.IsPublished ? "PublishCourse" : "UnpublishCourse", course.Title);
         await _db.SaveChangesAsync();
+        TempData["Ok"] = course.IsPublished
+            ? "Course republished — it is back in the catalogue and open to learners."
+            : "Course unpublished. Learners cannot open it or its assessments while you revise it.";
         return RedirectToAction("ManageCourse", new { id });
     }
 

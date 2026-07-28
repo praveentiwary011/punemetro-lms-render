@@ -6,11 +6,37 @@
     <a asp-controller="Instructor" asp-action="ManageCourse" asp-route-id="@Model.CourseId" class="text-decoration-none">@Model.Course?.Title</a>
     <span class="text-muted">/ Quiz builder</span>
 </nav>
-<h2 class="mb-1">
-    @Model.Title
-    @if (Model.GeneratedByAi) { <span class="badge text-bg-info-subtle text-info-emphasis border border-info-subtle align-middle ms-2"><i class="bi bi-stars me-1"></i>AI-drafted</span> }
-</h2>
-<p class="text-muted mb-4">@Model.Questions.Count question(s) · @Model.TimeLimitMinutes min · @Model.MaxAttempts attempts · pass @Model.PassingScore% · total @Model.Questions.Sum(q => q.Points).ToString("0.#") pts</p>
+<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+    <h2 class="mb-1">
+        @Model.Title
+        @if (Model.GeneratedByAi) { <span class="badge text-bg-info-subtle text-info-emphasis border border-info-subtle align-middle ms-2"><i class="bi bi-stars me-1"></i>AI-drafted</span> }
+        @if (Model.IsPublished)
+        {
+            <span class="badge text-bg-success-subtle text-success-emphasis border border-success-subtle align-middle ms-2"><i class="bi bi-broadcast me-1"></i>Live</span>
+        }
+        else
+        {
+            <span class="badge text-bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle align-middle ms-2"><i class="bi bi-pause-circle me-1"></i>Offline &mdash; draft</span>
+        }
+    </h2>
+    <form method="post" asp-action="TogglePublish" class="m-0 flex-shrink-0">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" value="@Model.Id" />
+        <button class="btn btn-sm @(Model.IsPublished ? "btn-outline-warning" : "btn-success")"
+                data-confirm="@(Model.IsPublished ? "Take this assessment offline? Learners will not be able to start it until you publish it again." : null)">
+            @(Model.IsPublished ? "Take offline" : "Publish assessment")
+        </button>
+    </form>
+</div>
+<p class="text-muted mb-3">@Model.Questions.Count question(s) · @Model.TimeLimitMinutes min · @Model.MaxAttempts attempts · pass @Model.PassingScore% · total @Model.Questions.Sum(q => q.Points).ToString("0.#") pts</p>
+@if (!Model.IsPublished)
+{
+    <div class="alert alert-secondary py-2 small mb-4"><i class="bi bi-pause-circle me-1"></i>This assessment is <strong>offline</strong>. Learners cannot start it. Revise it freely, then use <em>Publish assessment</em> when it is ready.</div>
+}
+else
+{
+    <div class="alert alert-warning py-2 small mb-4"><i class="bi bi-exclamation-triangle me-1"></i>This assessment is <strong>live</strong> — enrolled learners can sit it now. Take it offline before making substantial changes, so nobody sits a paper mid-revision.</div>
+}
 @if (Model.GeneratedByAi)
 {
     <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>These questions were drafted by AI from this course's material. <strong>Review each one</strong> — use <em>Edit</em> to correct wording, options or marks, or <em>Delete</em> to drop it.</div>

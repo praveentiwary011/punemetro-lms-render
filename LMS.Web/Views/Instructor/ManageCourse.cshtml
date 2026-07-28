@@ -33,7 +33,14 @@
                     <form method="post" asp-action="TogglePublish" class="m-0">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="id" value="@Model.Id" />
-                        <button class="btn btn-sm @(Model.IsPublished ? "btn-outline-warning" : "btn-success")">
+                        @{
+                            var learners = Model.Enrollments?.Count(e => e.Status != EnrollmentStatus.Dropped) ?? 0;
+                            var unpublishWarning = learners > 0
+                                ? $"Unpublish this course? {learners} enrolled learner(s) will not be able to open it or sit its assessments until you republish it."
+                                : "Unpublish this course? It returns to draft and is removed from the catalogue.";
+                        }
+                        <button class="btn btn-sm @(Model.IsPublished ? "btn-outline-warning" : "btn-success")"
+                                data-confirm="@(Model.IsPublished ? unpublishWarning : null)">
                             @(Model.IsPublished ? "Unpublish" : "Publish")
                         </button>
                     </form>

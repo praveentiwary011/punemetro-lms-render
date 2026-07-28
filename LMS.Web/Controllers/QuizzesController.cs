@@ -41,7 +41,10 @@ public class QuizzesController : Controller
             CourseId = courseId, Title = title, Description = description ?? "",
             TimeLimitMinutes = timeLimitMinutes <= 0 ? 30 : timeLimitMinutes,
             MaxAttempts = maxAttempts <= 0 ? 1 : maxAttempts,
-            PassingScore = passingScore, DueDate = dueDate
+            PassingScore = passingScore, DueDate = dueDate,
+            // Starts offline: a quiz must never be sat before its questions exist.
+            // The trainer publishes it from the editor when the paper is ready.
+            IsPublished = false
         };
         _db.Quizzes.Add(quiz);
         await _db.SaveChangesAsync();
@@ -57,6 +60,33 @@ public class QuizzesController : Controller
             .FirstOrDefaultAsync(q => q.Id == id);
         if (quiz == null || !OwnsCourse(quiz.Course!)) return NotFound();
         return View(quiz);
+    }
+
+    /// <summary>Take a single assessment offline, or put it live, without touching the rest
+    /// of the course — so a paper can be rewritten while the course itself stays open to
+    /// learners. A newly created quiz starts offline (draft) so it is never sat before its
+    /// questions exist; publishing it is the trainer's explicit decision.</summary>
+    [Authorize(Roles = "Instructor,Admin,Principal")]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> TogglePublish(int id)
+    {
+        var quiz = await _db.Quizzes.Include(q => q.Course).FirstOrDefaultAsync(q => q.Id == id);
+        if (quiz == null || !OwnsCourse(quiz.Course!)) return NotFound();
+
+        if (!quiz.IsPublished && !await _db.Questions.AnyAsync(x => x.QuizId == id))
+        {
+            TempData["Err"] = "Add at least one question before publishing this assessment.";
+            return RedirectToAction("Edit", new { id });
+        }
+
+        quiz.IsPublished = !quiz.IsPublished;
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "",
+            quiz.IsPublished ? "PublishQuiz" : "UnpublishQuiz", $"{quiz.Course!.Title} — {quiz.Title}");
+        await _db.SaveChangesAsync();
+        TempData["Ok"] = quiz.IsPublished
+            ? "Assessment published — enrolled learners can now sit it."
+            : "Assessment taken offline. Learners cannot start it until you publish it again.";
+        return RedirectToAction("Edit", new { id });
     }
 
     /// <summary>Create a quiz whose questions the AI drafts from this course's own material,
@@ -81,7 +111,10 @@ public class QuizzesController : Controller
             MaxAttempts = maxAttempts <= 0 ? 1 : maxAttempts,
             PassingScore = passingScore,
             DueDate = dueDate,
-            GeneratedByAi = true
+            GeneratedByAi = true,
+            // AI-drafted questions are reviewed before use (§AIG-11), so the paper
+            // starts offline and the trainer publishes it once satisfied.
+            IsPublished = false
         };
         _db.Quizzes.Add(quiz);
         await _db.SaveChangesAsync();
@@ -294,8 +327,16 @@ public class QuizzesController : Controller
         var quiz = await _db.Quizzes
             .Include(q => q.Course)
             .Include(q => q.Questions.OrderBy(x => x.Order)).ThenInclude(x => x.Options)
-            .FirstOrDefaultAsync(q => q.Id == id && q.IsPublished);
+            .FirstOrDefaultAsync(q => q.Id == id);
         if (quiz == null) return NotFound();
+        // An assessment is closed to learners either in its own right (taken offline while
+        // it is rewritten) or because its course is unpublished and therefore a draft under
+        // revision (§CRS-06). Either way say so, rather than returning a bare 404.
+        if (!quiz.IsPublished || !quiz.Course!.IsPublished)
+        {
+            TempData["Err"] = "This assessment is being updated and is temporarily unavailable. Please check back shortly.";
+            return RedirectToAction("MyCourses", "Courses");
+        }
 
         var uid = User.GetUserId();
         var enrolled = await _db.Enrollments.AnyAsync(e => e.CourseId == quiz.CourseId && e.StudentId == uid && e.Status != EnrollmentStatus.Dropped);
@@ -326,6 +367,15 @@ public class QuizzesController : Controller
             .Include(q => q.Questions).ThenInclude(x => x.Options)
             .FirstOrDefaultAsync(q => q.Id == id);
         if (quiz == null) return NotFound();
+        // Refuse a submission for an assessment that has since been withdrawn. The paper may
+        // have been rewritten in the meantime, and scoring these answers against the new
+        // questions would silently produce a wrong mark — better to say the attempt was not
+        // recorded. (The trainer is warned before taking a live assessment offline.)
+        if (!quiz.IsPublished || !quiz.Course!.IsPublished)
+        {
+            TempData["Err"] = "This assessment was withdrawn for updating while you were taking it, so your attempt could not be recorded. It has not been counted against your allowed attempts — please try again once it is available.";
+            return RedirectToAction("MyCourses", "Courses");
+        }
 
         var uid = User.GetUserId();
         var attemptCount = await _db.QuizAttempts.CountAsync(a => a.QuizId == id && a.StudentId == uid && a.SubmittedAt != null);

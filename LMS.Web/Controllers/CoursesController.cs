@@ -23,6 +23,19 @@ public class CoursesController : Controller
         return orgId == null ? courses : courses.Where(c => c.OrganisationId == null || c.OrganisationId == orgId);
     }
 
+    /// <summary>Staff who may open a course while it is unpublished: its own trainer,
+    /// plus Principal/Admin, who oversee every course. Lets them check a revision before
+    /// republishing it (§CRS-06).</summary>
+    private bool CanPreviewDraft(Course course) =>
+        User.IsInRole("Admin") || User.IsInRole("Principal") || course.InstructorId == User.GetUserId();
+
+    /// <summary>An unpublished course is a DRAFT: it is being revised, so learners cannot
+    /// open it or sit its assessments until it is republished. To take a course off the
+    /// catalogue while enrolled learners carry on working through it, deactivate it
+    /// instead (§CRS-07) — that is the distinction between the two controls.</summary>
+    private const string DraftMessage =
+        "This course is being updated and is temporarily unavailable. Please check back shortly.";
+
     [AllowAnonymous]
     public async Task<IActionResult> Catalog(string? q, int? categoryId)
     {
@@ -65,10 +78,16 @@ public class CoursesController : Controller
             .Include(c => c.Enrollments)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (course == null) return NotFound();
+        if (!course.IsPublished && !CanPreviewDraft(course))
+        {
+            TempData["Err"] = DraftMessage;
+            return RedirectToAction("MyCourses");
+        }
 
         var uid = User.GetUserId();
         var enrollment = course.Enrollments.FirstOrDefault(e => e.StudentId == uid);
         ViewBag.Enrollment = enrollment;
+        ViewBag.IsDraftPreview = !course.IsPublished;
 
         if (enrollment != null)
         {
@@ -166,6 +185,11 @@ public class CoursesController : Controller
         var isOwner = course.InstructorId == uid || User.IsInRole("Admin") || User.IsInRole("Principal");
         var enrolled = await _db.Enrollments.AnyAsync(e => e.CourseId == id && e.StudentId == uid && e.Status != EnrollmentStatus.Dropped);
         if (!isOwner && !enrolled) return RedirectToAction("Details", new { id });
+        if (!course.IsPublished && !isOwner)
+        {
+            TempData["Err"] = DraftMessage;
+            return RedirectToAction("MyCourses");
+        }
 
         var lessons = course.Modules.SelectMany(m => m.Lessons).ToList();
         if (lessons.Count == 0) return RedirectToAction("Details", new { id });
