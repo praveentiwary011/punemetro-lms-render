@@ -65,6 +65,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<TrainingLocation> TrainingLocations => Set<TrainingLocation>();
     public DbSet<SubscriptionLicense> SubscriptionLicenses => Set<SubscriptionLicense>();
     public DbSet<SsoConfiguration> SsoConfigurations => Set<SsoConfiguration>();
+    public DbSet<CourseEditRequest> CourseEditRequests => Set<CourseEditRequest>();
     public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
     public DbSet<SubjectiveGradeResult> SubjectiveGradeResults => Set<SubjectiveGradeResult>();
     public DbSet<SubjectiveGradingReview> SubjectiveGradingReviews => Set<SubjectiveGradingReview>();
@@ -172,6 +173,20 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(s => s.OrganisationId).OnDelete(DeleteBehavior.Cascade);
         builder.Entity<SsoConfiguration>()
             .HasIndex(s => s.OrganisationId).IsUnique();
+
+        // ---- Delegated course editing (§CRS-11) ----
+        builder.Entity<CourseEditRequest>()
+            .HasOne(r => r.Course).WithMany()
+            .HasForeignKey(r => r.CourseId).OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<CourseEditRequest>()
+            .HasOne(r => r.Trainer).WithMany()
+            .HasForeignKey(r => r.TrainerId).OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<CourseEditRequest>()
+            .HasOne(r => r.DecidedBy).WithMany()
+            .HasForeignKey(r => r.DecidedById).OnDelete(DeleteBehavior.Restrict);
+        // The permission lookup on every course-edit action filters by all three.
+        builder.Entity<CourseEditRequest>()
+            .HasIndex(r => new { r.CourseId, r.TrainerId, r.Status });
 
         // ---- Subjective auto-grading (§AIG) ----
         builder.Entity<KnowledgeChunk>()

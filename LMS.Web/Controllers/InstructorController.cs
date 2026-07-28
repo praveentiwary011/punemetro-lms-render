@@ -37,10 +37,161 @@ public class InstructorController : Controller
         catch { /* best-effort */ }
     }
 
-    private IQueryable<Course> MyCourses()
+    /// <summary>Courses this caller may build and manage: everything for Admin/Principal,
+    /// otherwise the trainer's own courses plus any they hold an approved edit grant for
+    /// (§CRS-11). Every management action in this controller funnels through here, so the
+    /// grant takes effect everywhere at once.</summary>
+    private IQueryable<Course> MyCourses() => CourseAccess.Editable(_db, User);
+
+    /// <summary>Courses this trainer authored — the "My Courses" listing.</summary>
+    private IQueryable<Course> AuthoredCourses()
     {
         var uid = User.GetUserId();
-        return User.IsInRole("Admin") || User.IsInRole("Principal") ? _db.Courses : _db.Courses.Where(c => c.InstructorId == uid);
+        return _db.Courses.Where(c => c.InstructorId == uid);
+    }
+
+    /// <summary>"My Courses" — the courses this trainer authored, which they may always
+    /// edit, update and unpublish. Admin/Principal see the courses they authored too;
+    /// their oversight of everything else is the All Courses listing.</summary>
+    public async Task<IActionResult> MyCourseList()
+    {
+        var courses = await AuthoredCourses()
+            .Include(c => c.Category).Include(c => c.Enrollments)
+            .OrderBy(c => c.Title).ToListAsync();
+        ViewBag.GrantedIds = new List<int>();
+        return View("MyCourseList", courses);
+    }
+
+    /// <summary>"All Courses" — every course in the organisation (the tenant query filter
+    /// scopes this automatically). A trainer may only open a course they did not author
+    /// once an Admin or Principal has approved their edit request (§CRS-11); until then
+    /// the row is read-only and offers a "Request edit access" button.</summary>
+    public async Task<IActionResult> AllCourses(string? q)
+    {
+        var courses = _db.Courses.Include(c => c.Category).Include(c => c.Instructor).Include(c => c.Enrollments)
+            .AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            courses = courses.Where(c => c.Title.ToLower().Contains(term)
+                || c.Code.ToLower().Contains(term)
+                || (c.Instructor != null && c.Instructor.FullName.ToLower().Contains(term)));
+        }
+
+        var uid = User.GetUserId();
+        ViewBag.Query = q;
+        ViewBag.MyId = uid;
+        ViewBag.IsOversight = CourseAccess.IsOversight(User);
+        ViewBag.GrantedIds = await CourseAccess.GrantedCourseIdsAsync(_db, uid);
+        ViewBag.PendingIds = await CourseAccess.PendingCourseIdsAsync(_db, uid);
+        return View(await courses.OrderBy(c => c.Title).ToListAsync());
+    }
+
+    /// <summary>A trainer asks an Admin/Principal for edit rights on someone else's course.</summary>
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RequestEditAccess(int courseId, string? reason)
+    {
+        var course = await _db.Courses.FirstOrDefaultAsync(c => c.Id == courseId);
+        if (course == null) return NotFound();
+
+        var uid = User.GetUserId();
+        if (await CourseAccess.CanEditAsync(_db, User, course))
+        {
+            TempData["Err"] = "You can already edit this course.";
+            return RedirectToAction("AllCourses");
+        }
+        // One open request per course per trainer — asking twice must not queue twice.
+        if (await _db.CourseEditRequests.AnyAsync(r => r.CourseId == courseId && r.TrainerId == uid
+                && r.Status == CourseEditAccessStatus.Pending))
+        {
+            TempData["Err"] = "You already have a request awaiting a decision for this course.";
+            return RedirectToAction("AllCourses");
+        }
+
+        _db.CourseEditRequests.Add(new CourseEditRequest
+        {
+            CourseId = courseId, TrainerId = uid, Reason = (reason ?? "").Trim(),
+            Status = CourseEditAccessStatus.Pending
+        });
+
+        // Tell the people who can decide it — the tenant's Admins and Principals.
+        var orgId = await _db.Users.Where(u => u.Id == uid).Select(u => u.OrganisationId).FirstOrDefaultAsync();
+        var deciders = await _db.Users.Where(u => u.OrganisationId == orgId && u.IsActive)
+            .Join(_db.UserRoles, u => u.Id, ur => ur.UserId, (u, ur) => new { u.Id, ur.RoleId })
+            .Join(_db.Roles.Where(r => r.Name == "Admin" || r.Name == "Principal"),
+                  x => x.RoleId, r => r.Id, (x, r) => x.Id)
+            .Distinct().ToListAsync();
+        foreach (var adminId in deciders)
+            Notifier.Notify(_db, adminId, $"Edit access requested for \"{course.Title}\".", "/Instructor/CourseEditRequests");
+
+        Notifier.Audit(_db, uid, User.Identity!.Name ?? "", "RequestCourseEditAccess", course.Title);
+        await _db.SaveChangesAsync();
+        TempData["Ok"] = "Request sent. You will be notified once an Admin or Principal decides.";
+        return RedirectToAction("AllCourses");
+    }
+
+    // ---------- Edit-access approvals (Admin / Principal) ----------
+    // Action-level roles narrow the controller's Instructor,Admin,Principal to the two
+    // that may decide; a trainer reaching these URLs directly is refused.
+
+    /// <summary>The decision queue: requests awaiting a decision, plus the grants currently
+    /// in force so they can be revoked (§CRS-11).</summary>
+    [Authorize(Roles = "Admin,Principal")]
+    public async Task<IActionResult> CourseEditRequests()
+    {
+        var all = await _db.CourseEditRequests
+            .Include(r => r.Course).ThenInclude(c => c!.Instructor)   // the queue shows who authored it
+            .Include(r => r.Trainer).Include(r => r.DecidedBy)
+            .OrderByDescending(r => r.RequestedAt).ToListAsync();
+        ViewBag.Pending = all.Where(r => r.Status == CourseEditAccessStatus.Pending).ToList();
+        ViewBag.Granted = all.Where(r => r.Status == CourseEditAccessStatus.Approved).ToList();
+        return View(all.Where(r => r.Status is CourseEditAccessStatus.Rejected or CourseEditAccessStatus.Revoked).ToList());
+    }
+
+    [Authorize(Roles = "Admin,Principal")]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> DecideCourseEditRequest(int id, bool approve, string? note)
+    {
+        var req = await _db.CourseEditRequests.Include(r => r.Course)
+            .FirstOrDefaultAsync(r => r.Id == id && r.Status == CourseEditAccessStatus.Pending);
+        if (req == null) return NotFound();
+
+        req.Status = approve ? CourseEditAccessStatus.Approved : CourseEditAccessStatus.Rejected;
+        req.DecisionNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        req.DecidedById = User.GetUserId();
+        req.DecidedAt = DateTime.UtcNow;
+
+        Notifier.Notify(_db, req.TrainerId,
+            approve ? $"You can now edit \"{req.Course!.Title}\"."
+                    : $"Your request to edit \"{req.Course!.Title}\" was declined.",
+            approve ? $"/Instructor/ManageCourse/{req.CourseId}" : "/Instructor/AllCourses");
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "",
+            approve ? "ApproveCourseEditAccess" : "RejectCourseEditAccess", req.Course!.Title);
+        await _db.SaveChangesAsync();
+        TempData["Ok"] = approve ? "Edit access granted." : "Request declined.";
+        return RedirectToAction("CourseEditRequests");
+    }
+
+    /// <summary>Withdraw a grant already in force. The row is kept as Revoked rather than
+    /// deleted, so the history of who had access and when is never lost.</summary>
+    [Authorize(Roles = "Admin,Principal")]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RevokeCourseEditAccess(int id, string? note)
+    {
+        var req = await _db.CourseEditRequests.Include(r => r.Course)
+            .FirstOrDefaultAsync(r => r.Id == id && r.Status == CourseEditAccessStatus.Approved);
+        if (req == null) return NotFound();
+
+        req.Status = CourseEditAccessStatus.Revoked;
+        req.DecisionNote = string.IsNullOrWhiteSpace(note) ? req.DecisionNote : note.Trim();
+        req.DecidedById = User.GetUserId();
+        req.DecidedAt = DateTime.UtcNow;
+
+        Notifier.Notify(_db, req.TrainerId, $"Your edit access to \"{req.Course!.Title}\" has been withdrawn.", "/Instructor/AllCourses");
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "", "RevokeCourseEditAccess", req.Course!.Title);
+        await _db.SaveChangesAsync();
+        TempData["Ok"] = "Edit access withdrawn.";
+        return RedirectToAction("CourseEditRequests");
     }
 
     public async Task<IActionResult> Dashboard()
@@ -216,7 +367,7 @@ public class InstructorController : Controller
     public async Task<IActionResult> DeleteModule(int id)
     {
         var module = await _db.Modules.Include(m => m.Course).FirstOrDefaultAsync(m => m.Id == id);
-        if (module == null || (!User.IsInRole("Admin") && !User.IsInRole("Principal") && module.Course!.InstructorId != User.GetUserId())) return NotFound();
+        if (module == null || !await CourseAccess.CanEditAsync(_db, User, module.Course!)) return NotFound();
         _db.Modules.Remove(module);
         await _db.SaveChangesAsync();
         return RedirectToAction("ManageCourse", new { id = module.CourseId });
@@ -227,7 +378,7 @@ public class InstructorController : Controller
     public async Task<IActionResult> AddLesson(int moduleId, string title, LessonType type, string? content, string? url, int durationMinutes, IFormFile? file)
     {
         var module = await _db.Modules.Include(m => m.Course).Include(m => m.Lessons).FirstOrDefaultAsync(m => m.Id == moduleId);
-        if (module == null || (!User.IsInRole("Admin") && !User.IsInRole("Principal") && module.Course!.InstructorId != User.GetUserId())) return NotFound();
+        if (module == null || !await CourseAccess.CanEditAsync(_db, User, module.Course!)) return NotFound();
 
         // Uploaded document (PDF etc.) takes precedence over a typed URL
         var fileUrl = await SaveLessonFileAsync(file);
@@ -247,7 +398,7 @@ public class InstructorController : Controller
     public async Task<IActionResult> DeleteLesson(int id)
     {
         var lesson = await _db.Lessons.Include(l => l.Module)!.ThenInclude(m => m!.Course).FirstOrDefaultAsync(l => l.Id == id);
-        if (lesson == null || (!User.IsInRole("Admin") && !User.IsInRole("Principal") && lesson.Module!.Course!.InstructorId != User.GetUserId())) return NotFound();
+        if (lesson == null || !await CourseAccess.CanEditAsync(_db, User, lesson.Module!.Course!)) return NotFound();
         var courseId = lesson.Module!.CourseId;
 
         // Remove the lesson's own hosted file (e.g. an uploaded PDF) if it has one.
@@ -309,7 +460,7 @@ public class InstructorController : Controller
     public async Task<IActionResult> FinalizeGrade(int enrollmentId, double finalGrade)
     {
         var enrollment = await _db.Enrollments.Include(e => e.Course).FirstOrDefaultAsync(e => e.Id == enrollmentId);
-        if (enrollment == null || (!User.IsInRole("Admin") && !User.IsInRole("Principal") && enrollment.Course!.InstructorId != User.GetUserId())) return NotFound();
+        if (enrollment == null || !await CourseAccess.CanEditAsync(_db, User, enrollment.Course!)) return NotFound();
         enrollment.FinalGrade = finalGrade;
         if (finalGrade >= enrollment.Course!.PassingGrade)
         {

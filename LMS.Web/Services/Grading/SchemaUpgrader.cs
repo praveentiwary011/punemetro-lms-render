@@ -48,6 +48,17 @@ public static class SchemaUpgrader
             AllowLocalPassword {intc} NOT NULL,
             UpdatedAt {dt} NOT NULL)", ifNotExistsHandled: sqlite);
 
+        Run(db, log, $@"CREATE TABLE IF NOT EXISTS CourseEditRequests (
+            Id {pk},
+            CourseId {intc} NOT NULL,
+            TrainerId {txt} NOT NULL,
+            Reason {txt} NOT NULL,
+            Status {intc} NOT NULL,
+            DecisionNote {txt} NULL,
+            DecidedById {txt} NULL,
+            RequestedAt {dt} NOT NULL,
+            DecidedAt {dt} NULL)", ifNotExistsHandled: sqlite);
+
         Run(db, log, $@"CREATE TABLE IF NOT EXISTS KnowledgeChunks (
             Id {pk},
             OrganisationId {intc} NOT NULL,
@@ -87,6 +98,7 @@ public static class SchemaUpgrader
             ResolvedAt {dt} NULL)", ifNotExistsHandled: sqlite);
 
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_KnowledgeChunks_Org_Course ON KnowledgeChunks (OrganisationId, CourseId)", ifNotExistsHandled: true);
+        Run(db, log, "CREATE INDEX IF NOT EXISTS IX_CourseEditRequests_Course_Trainer_Status ON CourseEditRequests (CourseId, TrainerId, Status)", ifNotExistsHandled: true);
     }
 
     private static void Run(AppDbContext db, ILogger log, string sql, bool ifNotExistsHandled = false)

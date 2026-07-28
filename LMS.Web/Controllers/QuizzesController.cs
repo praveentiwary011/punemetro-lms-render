@@ -18,8 +18,9 @@ public class QuizzesController : Controller
     public QuizzesController(AppDbContext db, GradingOptions gradingOptions, GradingService grading, QuizGenerator generator)
     { _db = db; _gradingOptions = gradingOptions; _grading = grading; _generator = generator; }
 
-    private bool OwnsCourse(Course course) =>
-        User.IsInRole("Admin") || User.IsInRole("Principal") || course.InstructorId == User.GetUserId();
+    /// <summary>Authoring rights over a course's assessments: Admin/Principal, the course's
+    /// own trainer, or a trainer holding an approved edit grant for it (§CRS-11).</summary>
+    private Task<bool> OwnsCourseAsync(Course course) => CourseAccess.CanEditAsync(_db, User, course);
 
     /// <summary>Base attempts plus one per approved retake request.</summary>
     private async Task<int> AllowedAttemptsAsync(Quiz quiz, string studentId)
@@ -35,7 +36,7 @@ public class QuizzesController : Controller
     public async Task<IActionResult> Create(int courseId, string title, string description, int timeLimitMinutes, int maxAttempts, double passingScore, DateTime? dueDate)
     {
         var course = await _db.Courses.FirstOrDefaultAsync(c => c.Id == courseId);
-        if (course == null || !OwnsCourse(course)) return NotFound();
+        if (course == null || !await OwnsCourseAsync(course)) return NotFound();
         var quiz = new Quiz
         {
             CourseId = courseId, Title = title, Description = description ?? "",
@@ -58,7 +59,7 @@ public class QuizzesController : Controller
             .Include(q => q.Course)
             .Include(q => q.Questions.OrderBy(x => x.Order)).ThenInclude(x => x.Options)
             .FirstOrDefaultAsync(q => q.Id == id);
-        if (quiz == null || !OwnsCourse(quiz.Course!)) return NotFound();
+        if (quiz == null || !await OwnsCourseAsync(quiz.Course!)) return NotFound();
         return View(quiz);
     }
 
@@ -71,7 +72,7 @@ public class QuizzesController : Controller
     public async Task<IActionResult> TogglePublish(int id)
     {
         var quiz = await _db.Quizzes.Include(q => q.Course).FirstOrDefaultAsync(q => q.Id == id);
-        if (quiz == null || !OwnsCourse(quiz.Course!)) return NotFound();
+        if (quiz == null || !await OwnsCourseAsync(quiz.Course!)) return NotFound();
 
         if (!quiz.IsPublished && !await _db.Questions.AnyAsync(x => x.QuizId == id))
         {
@@ -97,7 +98,7 @@ public class QuizzesController : Controller
         int timeLimitMinutes, int maxAttempts, double passingScore, DateTime? dueDate, bool includeWritten = false)
     {
         var course = await _db.Courses.FirstOrDefaultAsync(c => c.Id == courseId);
-        if (course == null || !OwnsCourse(course)) return NotFound();
+        if (course == null || !await OwnsCourseAsync(course)) return NotFound();
 
         var minutes = timeLimitMinutes <= 0 ? 30 : timeLimitMinutes;
         var blueprint = QuizBlueprint.ForTimeLimit(minutes, includeWritten);
@@ -156,7 +157,7 @@ public class QuizzesController : Controller
         string? rubricText, string? referenceAnswer)
     {
         var quiz = await _db.Quizzes.Include(q => q.Course).Include(q => q.Questions).FirstOrDefaultAsync(q => q.Id == quizId);
-        if (quiz == null || !OwnsCourse(quiz.Course!)) return NotFound();
+        if (quiz == null || !await OwnsCourseAsync(quiz.Course!)) return NotFound();
 
         var question = new Question
         {
@@ -200,7 +201,7 @@ public class QuizzesController : Controller
     {
         var quiz = await _db.Quizzes.Include(q => q.Course).Include(q => q.Questions)
             .FirstOrDefaultAsync(q => q.Id == quizId);
-        if (quiz == null || !OwnsCourse(quiz.Course!)) return NotFound();
+        if (quiz == null || !await OwnsCourseAsync(quiz.Course!)) return NotFound();
 
         var blueprint = QuizBlueprint.ForExtra(addCount, includeWritten);
         GeneratedQuizResult result;
@@ -242,7 +243,7 @@ public class QuizzesController : Controller
             .Include(q => q.Options)
             .Include(q => q.Quiz)!.ThenInclude(z => z!.Course)
             .FirstOrDefaultAsync(q => q.Id == id);
-        if (question == null || !OwnsCourse(question.Quiz!.Course!)) return NotFound();
+        if (question == null || !await OwnsCourseAsync(question.Quiz!.Course!)) return NotFound();
         if (string.IsNullOrWhiteSpace(text))
         {
             TempData["Err"] = "The question text cannot be empty.";
@@ -289,7 +290,7 @@ public class QuizzesController : Controller
     public async Task<IActionResult> DeleteQuestion(int id)
     {
         var question = await _db.Questions.Include(q => q.Quiz)!.ThenInclude(z => z!.Course).FirstOrDefaultAsync(q => q.Id == id);
-        if (question == null || !OwnsCourse(question.Quiz!.Course!)) return NotFound();
+        if (question == null || !await OwnsCourseAsync(question.Quiz!.Course!)) return NotFound();
         var quizId = question.QuizId;
         _db.Questions.Remove(question);
         await _db.SaveChangesAsync();
@@ -301,7 +302,7 @@ public class QuizzesController : Controller
     public async Task<IActionResult> Delete(int id)
     {
         var quiz = await _db.Quizzes.Include(q => q.Course).FirstOrDefaultAsync(q => q.Id == id);
-        if (quiz == null || !OwnsCourse(quiz.Course!)) return NotFound();
+        if (quiz == null || !await OwnsCourseAsync(quiz.Course!)) return NotFound();
         _db.Quizzes.Remove(quiz);
         await _db.SaveChangesAsync();
         return RedirectToAction("ManageCourse", "Instructor", new { id = quiz.CourseId });
@@ -316,7 +317,7 @@ public class QuizzesController : Controller
             .Include(q => q.Attempts.OrderByDescending(a => a.SubmittedAt)).ThenInclude(a => a.Student)
             .FirstOrDefaultAsync(q => q.Id == id);
         if (quiz == null) return NotFound();
-        if (!User.IsInRole("Principal") && !OwnsCourse(quiz.Course!)) return NotFound();
+        if (!User.IsInRole("Principal") && !await OwnsCourseAsync(quiz.Course!)) return NotFound();
         return View(quiz);
     }
 
@@ -529,7 +530,7 @@ public class QuizzesController : Controller
         {
             var a = answers.FirstOrDefault(x => x.Id == r.QuizAnswerId);
             var course = a?.Question?.Quiz?.Course;
-            if (a == null || course == null || !OwnsCourse(course)) continue;   // tenant + ownership gate
+            if (a == null || course == null || !await OwnsCourseAsync(course)) continue;   // tenant + ownership gate
             var res = latestResults.Where(x => x.QuizAnswerId == r.QuizAnswerId).OrderByDescending(x => x.GradedAt).FirstOrDefault();
             rows.Add(new ReviewRow(r.Id, a.Question!.Text, a.Question!.RubricText, a.Question!.ReferenceAnswer ?? "",
                 a.TextAnswer ?? "", r.ProposedScore, a.Question!.Points,
@@ -548,7 +549,7 @@ public class QuizzesController : Controller
         if (review == null) { TempData["Err"] = "That review was already resolved."; return RedirectToAction("Reviews"); }
         var course = await _db.QuizAnswers.Where(a => a.Id == review.QuizAnswerId)
             .Select(a => a.Question!.Quiz!.Course).FirstOrDefaultAsync();
-        if (course == null || !OwnsCourse(course)) return Forbid();
+        if (course == null || !await OwnsCourseAsync(course)) return Forbid();
 
         await _grading.ResolveReviewAsync(reviewId, score, feedback, User.GetUserId());
         Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "", "ResolveSubjectiveGrade");

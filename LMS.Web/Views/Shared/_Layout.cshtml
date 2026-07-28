@@ -123,7 +123,7 @@
                                         <li class="nk-menu-item @Active("Admin", "Organisations") @Active("Admin", "Organisation")"><a asp-controller="Admin" asp-action="Organisations" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-building-fill"></em></span><span class="nk-menu-text">Organisations</span></a></li>
                                     }
                                     <li class="nk-menu-item @Active("Admin", "OrgRoles")"><a asp-controller="Admin" asp-action="OrgRoles" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-shield-star-fill"></em></span><span class="nk-menu-text">Organisation Roles</span></a></li>
-                                    var g1 = Any("Admin/Courses", "Instructor/CreateCourse", "Instructor/Batches", "Admin/Enrollments", "Admin/Announcements");
+                                    var g1 = Any("Admin/Courses", "Instructor/CreateCourse", "Instructor/Batches", "Admin/Enrollments", "Admin/Announcements", "Instructor/CourseEditRequests");
                                     <li class="nk-menu-item has-sub @g1">
                                         <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-book-fill"></em></span><span class="nk-menu-text">Training Programs</span></a>
                                         <ul class="nk-menu-sub" style="@(g1 != "" ? "display:block" : null)">
@@ -132,6 +132,7 @@
                                             <li class="nk-menu-item @Active("Instructor", "Batches")"><a asp-controller="Instructor" asp-action="Batches" class="nk-menu-link"><span class="nk-menu-text">Batch Set-up</span></a></li>
                                             <li class="nk-menu-item @Active("Admin", "Enrollments")"><a asp-controller="Admin" asp-action="Enrollments" class="nk-menu-link"><span class="nk-menu-text">Enrollments &amp; History</span></a></li>
                                             <li class="nk-menu-item @Active("Admin", "Announcements")"><a asp-controller="Admin" asp-action="Announcements" class="nk-menu-link"><span class="nk-menu-text">Recent Announcements</span></a></li>
+                                            <li class="nk-menu-item @Active("Instructor", "CourseEditRequests")"><a asp-controller="Instructor" asp-action="CourseEditRequests" class="nk-menu-link"><span class="nk-menu-text">Course Edit Access</span></a></li>
                                         </ul>
                                     </li>
                                     var g2 = Any("Training/Sessions", "Calendar/Index");
@@ -182,6 +183,7 @@
                                     <li class="nk-menu-heading"><h6 class="overline-title text-primary-alt">Principal</h6></li>
                                     <li class="nk-menu-item @Active("Principal", "Dashboard")"><a asp-controller="Principal" asp-action="Dashboard" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-dashboard-fill"></em></span><span class="nk-menu-text">Dashboard</span></a></li>
                                     <li class="nk-menu-item @Active("Principal", "Courses")"><a asp-controller="Principal" asp-action="Courses" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-book-fill"></em></span><span class="nk-menu-text">Course Oversight</span></a></li>
+                                    <li class="nk-menu-item @Active("Instructor", "CourseEditRequests")"><a asp-controller="Instructor" asp-action="CourseEditRequests" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-shield-check"></em></span><span class="nk-menu-text">Course Edit Access</span></a></li>
                                     <li class="nk-menu-item @Active("Instructor", "CreateCourse")"><a asp-controller="Instructor" asp-action="CreateCourse" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-plus-circle-fill"></em></span><span class="nk-menu-text">New Course</span></a></li>
                                     <li class="nk-menu-item @Active("Instructor", "Batches")"><a asp-controller="Instructor" asp-action="Batches" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-users-fill"></em></span><span class="nk-menu-text">Batch Set-up</span></a></li>
                                     var g6 = Any("Knowledge/Documents", "Knowledge/Videos", "Knowledge/Faqs");
@@ -234,6 +236,8 @@
                                             <li class="nk-menu-item @Active("Calendar", "Index")"><a asp-controller="Calendar" asp-action="Index" class="nk-menu-link"><span class="nk-menu-text">Event Reminders</span></a></li>
                                         </ul>
                                     </li>
+                                    <li class="nk-menu-item @Active("Instructor", "MyCourseList")"><a asp-controller="Instructor" asp-action="MyCourseList" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-book-read"></em></span><span class="nk-menu-text">My Courses</span></a></li>
+                                    <li class="nk-menu-item @Active("Instructor", "AllCourses")"><a asp-controller="Instructor" asp-action="AllCourses" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-list-index"></em></span><span class="nk-menu-text">All Courses</span></a></li>
                                     <li class="nk-menu-item @Active("Instructor", "CreateCourse")"><a asp-controller="Instructor" asp-action="CreateCourse" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-plus-circle-fill"></em></span><span class="nk-menu-text">New Course</span></a></li>
                                     <li class="nk-menu-item @Active("Instructor", "Batches")"><a asp-controller="Instructor" asp-action="Batches" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-users-fill"></em></span><span class="nk-menu-text">Batch Set-up</span></a></li>
                                     var g11 = Any("Knowledge/Documents", "Knowledge/Videos", "Knowledge/Faqs");

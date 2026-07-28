@@ -1,0 +1,105 @@
+@model List<Course>
+@{
+    ViewData["Title"] = "All courses";
+    var myId = (string)ViewBag.MyId;
+    var isOversight = (bool)ViewBag.IsOversight;
+    var granted = (List<int>)ViewBag.GrantedIds;
+    var pending = (List<int>)ViewBag.PendingIds;
+}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-collection me-2"></i>All courses</h2>
+        <p class="text-muted mb-0">Every course in your organisation.</p>
+    </div>
+    <form method="get" class="d-flex gap-1">
+        <input name="q" value="@ViewBag.Query" class="form-control form-control-sm" placeholder="Search title, code or author" />
+        <button class="btn btn-sm btn-outline-primary">Search</button>
+    </form>
+</div>
+
+@if (!isOversight)
+{
+    <div class="alert alert-info py-2 small">
+        <i class="bi bi-info-circle me-1"></i>
+        You can edit the courses you authored. To edit, update or unpublish someone else's course,
+        request access — an Admin or Principal decides, and you are notified either way.
+    </div>
+}
+
+<div class="card">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Course</th><th>Author</th><th>Category</th><th>Enrolled</th><th>Status</th><th class="text-end">Access</th></tr></thead>
+        <tbody>
+        @foreach (var c in Model)
+        {
+            var mine = c.InstructorId == myId;
+            var canEdit = isOversight || mine || granted.Contains(c.Id);
+            <tr>
+                <td><strong>@c.Code</strong> — @c.Title</td>
+                <td>
+                    @(c.Instructor?.FullName ?? "—")
+                    @if (mine) { <span class="badge text-bg-primary-subtle text-primary-emphasis border border-primary-subtle ms-1">You</span> }
+                </td>
+                <td>@(c.Category?.Name ?? "—")</td>
+                <td>@c.Enrollments.Count</td>
+                <td>
+                    @if (!c.IsPublished)
+                    {
+                        <span class="badge text-bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle">Draft</span>
+                    }
+                    else if (!c.IsActive)
+                    {
+                        <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle">Deactivated</span>
+                    }
+                    else
+                    {
+                        <span class="badge text-bg-success-subtle text-success-emphasis border border-success-subtle">Published</span>
+                    }
+                </td>
+                <td class="text-end">
+                    @if (canEdit)
+                    {
+                        @if (!mine && !isOversight)
+                        {
+                            <span class="badge text-bg-success-subtle text-success-emphasis border border-success-subtle me-1" title="An Admin or Principal approved your request">
+                                <i class="bi bi-key me-1"></i>Access granted
+                            </span>
+                        }
+                        <a class="btn btn-sm btn-outline-primary" asp-action="ManageCourse" asp-route-id="@c.Id">
+                            <i class="bi bi-pencil-square me-1"></i>Manage
+                        </a>
+                    }
+                    else if (pending.Contains(c.Id))
+                    {
+                        <span class="badge text-bg-info-subtle text-info-emphasis border border-info-subtle">
+                            <i class="bi bi-hourglass-split me-1"></i>Request pending
+                        </span>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-outline-secondary" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#req-@c.Id" aria-expanded="false">
+                            <i class="bi bi-unlock me-1"></i>Request edit access
+                        </button>
+                    }
+                </td>
+            </tr>
+            @if (!canEdit && !pending.Contains(c.Id))
+            {
+                <tr class="collapse" id="req-@c.Id">
+                    <td colspan="6" class="bg-light">
+                        <form method="post" asp-action="RequestEditAccess" class="d-flex gap-2 align-items-center flex-wrap">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="courseId" value="@c.Id" />
+                            <label class="form-label mb-0 small text-muted">Why do you need to edit &ldquo;@c.Title&rdquo;?</label>
+                            <input name="reason" class="form-control form-control-sm flex-grow-1"
+                                   placeholder="e.g. covering for the author while they are on leave" />
+                            <button class="btn btn-sm btn-primary">Send request</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>

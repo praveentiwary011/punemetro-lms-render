@@ -1,0 +1,114 @@
+@model List<CourseEditRequest>
+@{
+    ViewData["Title"] = "Course edit access";
+    var pending = (List<CourseEditRequest>)ViewBag.Pending;
+    var granted = (List<CourseEditRequest>)ViewBag.Granted;
+}
+<div class="mb-4">
+    <h2 class="mb-1"><i class="bi bi-key me-2"></i>Course edit access</h2>
+    <p class="text-muted mb-0">Trainers may always edit the courses they authored. Anything else needs your approval.</p>
+</div>
+
+<h5 class="mb-2">Awaiting decision @if (pending.Any()) { <span class="badge text-bg-info-subtle text-info-emphasis border border-info-subtle">@pending.Count</span> }</h5>
+<div class="card mb-4">
+    @if (!pending.Any())
+    {
+        <div class="p-4 text-muted">Nothing waiting.</div>
+    }
+    else
+    {
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Trainer</th><th>Course</th><th>Reason</th><th>Requested</th><th class="text-end">Decision</th></tr></thead>
+            <tbody>
+            @foreach (var r in pending)
+            {
+                <tr>
+                    <td>@(r.Trainer?.FullName ?? "—")</td>
+                    <td><strong>@r.Course?.Code</strong> — @r.Course?.Title<br /><span class="small text-muted">author: @(r.Course?.Instructor?.FullName ?? "—")</span></td>
+                    <td class="small">@(string.IsNullOrWhiteSpace(r.Reason) ? "—" : r.Reason)</td>
+                    <td class="small text-muted">@r.RequestedAt.ToString("dd MMM yyyy")</td>
+                    <td class="text-end">
+                        <form method="post" asp-action="DecideCourseEditRequest" class="d-inline-flex gap-1 align-items-center">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@r.Id" />
+                            <input name="note" class="form-control form-control-sm" style="width:12rem" placeholder="Note (optional)" />
+                            <button name="approve" value="true" class="btn btn-sm btn-success">Approve</button>
+                            <button name="approve" value="false" class="btn btn-sm btn-outline-danger">Decline</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>
+
+<h5 class="mb-2">Access currently granted @if (granted.Any()) { <span class="badge text-bg-success-subtle text-success-emphasis border border-success-subtle">@granted.Count</span> }</h5>
+<div class="card mb-4">
+    @if (!granted.Any())
+    {
+        <div class="p-4 text-muted">No trainer currently holds edit access to another author's course.</div>
+    }
+    else
+    {
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Trainer</th><th>Course</th><th>Granted by</th><th>Granted</th><th class="text-end">Actions</th></tr></thead>
+            <tbody>
+            @foreach (var r in granted)
+            {
+                <tr>
+                    <td>@(r.Trainer?.FullName ?? "—")</td>
+                    <td><strong>@r.Course?.Code</strong> — @r.Course?.Title</td>
+                    <td>@(r.DecidedBy?.FullName ?? "—")</td>
+                    <td class="small text-muted">@(r.DecidedAt?.ToString("dd MMM yyyy") ?? "—")</td>
+                    <td class="text-end">
+                        <form method="post" asp-action="RevokeCourseEditAccess" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@r.Id" />
+                            <button class="btn btn-sm btn-outline-warning"
+                                    data-confirm="Withdraw @(r.Trainer?.FullName ?? "this trainer")'s edit access to &quot;@r.Course?.Title&quot;?">
+                                Withdraw access
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>
+
+<h5 class="mb-2">History</h5>
+<div class="card">
+    @if (!Model.Any())
+    {
+        <div class="p-4 text-muted">No declined or withdrawn requests yet.</div>
+    }
+    else
+    {
+        <table class="table align-middle mb-0">
+            <thead><tr><th>Trainer</th><th>Course</th><th>Outcome</th><th>Note</th><th>Decided</th></tr></thead>
+            <tbody>
+            @foreach (var r in Model)
+            {
+                <tr>
+                    <td>@(r.Trainer?.FullName ?? "—")</td>
+                    <td><strong>@r.Course?.Code</strong> — @r.Course?.Title</td>
+                    <td>
+                        @if (r.Status == CourseEditAccessStatus.Rejected)
+                        {
+                            <span class="badge text-bg-danger-subtle text-danger-emphasis border border-danger-subtle">Declined</span>
+                        }
+                        else
+                        {
+                            <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle">Withdrawn</span>
+                        }
+                    </td>
+                    <td class="small">@(string.IsNullOrWhiteSpace(r.DecisionNote) ? "—" : r.DecisionNote)</td>
+                    <td class="small text-muted">@(r.DecidedAt?.ToString("dd MMM yyyy") ?? "—")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>

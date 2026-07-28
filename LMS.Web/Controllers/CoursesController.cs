@@ -26,8 +26,8 @@ public class CoursesController : Controller
     /// <summary>Staff who may open a course while it is unpublished: its own trainer,
     /// plus Principal/Admin, who oversee every course. Lets them check a revision before
     /// republishing it (§CRS-06).</summary>
-    private bool CanPreviewDraft(Course course) =>
-        User.IsInRole("Admin") || User.IsInRole("Principal") || course.InstructorId == User.GetUserId();
+    private async Task<bool> CanPreviewDraftAsync(Course course) =>
+        await CourseAccess.CanEditAsync(_db, User, course);
 
     /// <summary>An unpublished course is a DRAFT: it is being revised, so learners cannot
     /// open it or sit its assessments until it is republished. To take a course off the
@@ -78,7 +78,7 @@ public class CoursesController : Controller
             .Include(c => c.Enrollments)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (course == null) return NotFound();
-        if (!course.IsPublished && !CanPreviewDraft(course))
+        if (!course.IsPublished && !await CanPreviewDraftAsync(course))
         {
             TempData["Err"] = DraftMessage;
             return RedirectToAction("MyCourses");

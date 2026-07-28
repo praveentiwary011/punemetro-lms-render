@@ -122,6 +122,29 @@ public class RetakeRequest
     public DateTime? DecidedAt { get; set; }
 }
 
+/// <summary>Lifecycle of a trainer's request to edit a course they did not author.
+/// Approved is the only state that confers rights; Revoked withdraws them again while
+/// keeping the history, so an approval is never silently deleted (§CRS-11).</summary>
+public enum CourseEditAccessStatus { Pending = 0, Approved = 1, Rejected = 2, Revoked = 3 }
+
+/// <summary>A trainer's request for edit/update/unpublish rights on a course belonging to
+/// another author, and the Admin/Principal decision on it. Rights are granted per course.</summary>
+public class CourseEditRequest
+{
+    public int Id { get; set; }
+    public int CourseId { get; set; }
+    public Course? Course { get; set; }
+    public string TrainerId { get; set; } = "";
+    public ApplicationUser? Trainer { get; set; }
+    public string Reason { get; set; } = "";
+    public CourseEditAccessStatus Status { get; set; }
+    public string? DecisionNote { get; set; }
+    public string? DecidedById { get; set; }
+    public ApplicationUser? DecidedBy { get; set; }
+    public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? DecidedAt { get; set; }
+}
+
 public enum TicketCategory { TechnicalAssistance = 0, LearningQuery = 1, HRLearningTeam = 2 }
 public enum TicketStatus { Open = 0, Answered = 1, Closed = 2 }
 
