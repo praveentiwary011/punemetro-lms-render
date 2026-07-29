@@ -113,6 +113,14 @@
                     <div class="nk-sidebar-content">
                         <div class="nk-sidebar-menu" data-simplebar>
                             <ul class="nk-menu">
+                                @{
+                                    // The learner menu links the course catalogue itself ("Enroll for
+                                    // Courses"). The General section below offers the same page to every
+                                    // role, so for a trainee it would be a second entry pointing at the
+                                    // same URL — and both would highlight. Render it only where the role
+                                    // menu does not already provide it.
+                                    var catalogInRoleMenu = false;
+                                }
                                 @if (activeRole == "Admin" || activeRole == "SuperUser")
                                 {
                                     <li class="nk-menu-heading"><h6 class="overline-title text-primary-alt">Administration</h6></li>
@@ -293,6 +301,7 @@
                                             <li class="nk-menu-item @Active("Courses", "Recommended")"><a asp-controller="Courses" asp-action="Recommended" class="nk-menu-link"><span class="nk-menu-text">Recommended Training</span></a></li>
                                         </ul>
                                     </li>
+                                    catalogInRoleMenu = true;   // this group links /Courses/Catalog
                                     var g16 = Any("Courses/Catalog", "Courses/Partner");
                                     <li class="nk-menu-item has-sub @g16">
                                         <a href="#" class="nk-menu-link nk-menu-toggle"><span class="nk-menu-icon"><em class="icon ni ni-plus-circle-fill"></em></span><span class="nk-menu-text">Enroll for Courses</span></a>
@@ -352,7 +361,10 @@
                                         }
                                     </a>
                                 </li>
-                                <li class="nk-menu-item @Active("Courses", "Catalog")"><a asp-controller="Courses" asp-action="Catalog" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-view-grid-fill"></em></span><span class="nk-menu-text">Course Catalog</span></a></li>
+                                @if (!catalogInRoleMenu)
+                                {
+                                    <li class="nk-menu-item @Active("Courses", "Catalog")"><a asp-controller="Courses" asp-action="Catalog" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-view-grid-fill"></em></span><span class="nk-menu-text">Course Catalog</span></a></li>
+                                }
                             </ul>
                         </div>
                     </div>
