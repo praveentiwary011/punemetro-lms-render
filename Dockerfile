@@ -24,6 +24,9 @@ ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production \
     LMS_DISABLE_HTTPS_REDIRECT=true \
     DatabaseProvider=Sqlite \
+    Logging__LogLevel__Default=Warning \
+    Logging__LogLevel__Microsoft.EntityFrameworkCore=Warning \
+    Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command=Warning \
     ConnectionStrings__Sqlite="Data Source=/data/lms.db"
 
 EXPOSE 8080
