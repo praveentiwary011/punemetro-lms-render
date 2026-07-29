@@ -30,7 +30,7 @@
 
   <ItemGroup>
     <PackageReference Include="MailKit" Version="4.17.0" />
-    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
+    <PackageReference Include="HtmlSanitizer" Version="9.1.973" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.8" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
@@ -42,6 +42,17 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+
+  <!-- ============ Security overrides (LMS-CMP-001) ============
+       Direct pins that raise vulnerable transitive dependencies to patched versions,
+       so no known-vulnerable package ships to a customer. Re-check after any parent
+       bump with: dotnet list package (vulnerable, include-transitive). -->
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" /><!-- GHSA-8g4q-xg66-9fp4 (High) -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" /><!-- GHSA-2m69-gcr7-jv3q (High) -->
+    <PackageReference Include="Azure.Identity" Version="1.13.2" /><!-- GHSA-wvxc-855f-jvrv, GHSA-m5vv-6r4h-3vj9 -->
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.77.1" /><!-- GHSA-x674-v45j-fwxw -->
   </ItemGroup>
 
 </Project>
