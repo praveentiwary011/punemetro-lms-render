@@ -66,6 +66,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SubscriptionLicense> SubscriptionLicenses => Set<SubscriptionLicense>();
     public DbSet<SsoConfiguration> SsoConfigurations => Set<SsoConfiguration>();
     public DbSet<CourseEditRequest> CourseEditRequests => Set<CourseEditRequest>();
+    public DbSet<OrganisationMailSetting> OrganisationMailSettings => Set<OrganisationMailSetting>();
     public DbSet<EmailOutbox> EmailOutbox => Set<EmailOutbox>();
     public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
     public DbSet<SubjectiveGradeResult> SubjectiveGradeResults => Set<SubjectiveGradeResult>();
@@ -174,6 +175,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(s => s.OrganisationId).OnDelete(DeleteBehavior.Cascade);
         builder.Entity<SsoConfiguration>()
             .HasIndex(s => s.OrganisationId).IsUnique();
+
+        // ---- Per-tenant email configuration (§NTF-04) ----
+        builder.Entity<OrganisationMailSetting>()
+            .HasOne(m => m.Organisation).WithMany()
+            .HasForeignKey(m => m.OrganisationId).OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<OrganisationMailSetting>()
+            .HasIndex(m => m.OrganisationId).IsUnique();   // at most one per tenant
 
         // ---- Delegated course editing (§CRS-11) ----
         builder.Entity<CourseEditRequest>()

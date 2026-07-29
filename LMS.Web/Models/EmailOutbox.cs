@@ -44,3 +44,29 @@ public class EmailOutbox
     public DateTime? LastAttemptAt { get; set; }
     public string? LastError { get; set; }
 }
+
+/// <summary>Per-tenant SMTP configuration (§NTF-04). A tenant with an enabled, usable row
+/// sends its own mail — its own relay, credentials, sender identity and link base URL —
+/// which is what keeps SPF/DKIM aligned for addresses at that organisation's domain.
+/// Tenants without one fall back to the platform default held in SiteSettings, which also
+/// carries platform-level mail that belongs to no tenant. Only the Super User may set these.</summary>
+public class OrganisationMailSetting
+{
+    public int Id { get; set; }
+    public int OrganisationId { get; set; }
+    public Organisation? Organisation { get; set; }
+
+    public bool IsEnabled { get; set; }
+    public string Host { get; set; } = "";
+    public int Port { get; set; } = 587;
+    public bool UseStartTls { get; set; } = true;
+    public string User { get; set; } = "";
+    /// <summary>Encrypted with the Data Protection API; never returned to the browser.</summary>
+    public string? PasswordProtected { get; set; }
+    public string FromAddress { get; set; } = "";
+    public string FromName { get; set; } = "";
+    /// <summary>Absolute base URL for links in this tenant's mail; falls back to the
+    /// platform value when blank, so a tenant on the shared host need not set it.</summary>
+    public string BaseUrl { get; set; } = "";
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}

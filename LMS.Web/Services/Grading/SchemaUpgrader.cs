@@ -63,6 +63,20 @@ public static class SchemaUpgrader
             LastAttemptAt {dt} NULL,
             LastError {txt} NULL)", ifNotExistsHandled: sqlite);
 
+        Run(db, log, $@"CREATE TABLE IF NOT EXISTS OrganisationMailSettings (
+            Id {pk},
+            OrganisationId {intc} NOT NULL,
+            IsEnabled {intc} NOT NULL,
+            Host {txt} NOT NULL,
+            Port {intc} NOT NULL,
+            UseStartTls {intc} NOT NULL,
+            User {txt} NOT NULL,
+            PasswordProtected {txt} NULL,
+            FromAddress {txt} NOT NULL,
+            FromName {txt} NOT NULL,
+            BaseUrl {txt} NOT NULL,
+            UpdatedAt {dt} NOT NULL)", ifNotExistsHandled: sqlite);
+
         Run(db, log, $@"CREATE TABLE IF NOT EXISTS CourseEditRequests (
             Id {pk},
             CourseId {intc} NOT NULL,
@@ -114,6 +128,7 @@ public static class SchemaUpgrader
 
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_KnowledgeChunks_Org_Course ON KnowledgeChunks (OrganisationId, CourseId)", ifNotExistsHandled: true);
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_CourseEditRequests_Course_Trainer_Status ON CourseEditRequests (CourseId, TrainerId, Status)", ifNotExistsHandled: true);
+        Run(db, log, "CREATE UNIQUE INDEX IF NOT EXISTS IX_OrganisationMailSettings_Org ON OrganisationMailSettings (OrganisationId)", ifNotExistsHandled: true);
         Run(db, log, "CREATE UNIQUE INDEX IF NOT EXISTS IX_EmailOutbox_DedupeKey ON EmailOutbox (DedupeKey)", ifNotExistsHandled: true);
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_EmailOutbox_Sent_Created ON EmailOutbox (SentAt, CreatedAt)", ifNotExistsHandled: true);
     }

@@ -13,9 +13,11 @@ public class SsoOptionsConfigurator : IConfigureNamedOptions<OpenIdConnectOption
 {
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<SsoOptionsConfigurator> _log;
+    private readonly LMS.Web.Services.Setup.SetupState _setup;
 
-    public SsoOptionsConfigurator(IServiceScopeFactory scopes, ILogger<SsoOptionsConfigurator> log)
-    { _scopes = scopes; _log = log; }
+    public SsoOptionsConfigurator(IServiceScopeFactory scopes, ILogger<SsoOptionsConfigurator> log,
+        LMS.Web.Services.Setup.SetupState setup)
+    { _scopes = scopes; _log = log; _setup = setup; }
 
     public void Configure(OpenIdConnectOptions options) => Configure(SsoService.Scheme, options);
 
@@ -25,7 +27,20 @@ public class SsoOptionsConfigurator : IConfigureNamedOptions<OpenIdConnectOption
 
         using var scope = _scopes.CreateScope();
         var sso = scope.ServiceProvider.GetRequiredService<SsoService>();
-        var cfg = sso.GetActiveAsync().GetAwaiter().GetResult();
+
+        // These options are materialised on the first request that touches authentication —
+        // including requests to the setup wizard itself, before any database exists. Reading
+        // the configuration then would throw ("no such table: SsoConfigurations"), the error
+        // page would re-execute, and the setup gate would redirect it back to /Setup: an
+        // infinite loop that makes a fresh installation unreachable. So skip the lookup while
+        // unconfigured, and treat a failed read as "no SSO" rather than letting it escape
+        // (e.g. an existing database upgraded from a build that predates the SSO tables).
+        LMS.Web.Models.SsoConfiguration? cfg = null;
+        if (!_setup.SetupMode)
+        {
+            try { cfg = sso.GetActiveAsync().GetAwaiter().GetResult(); }
+            catch (Exception ex) { _log.LogWarning(ex, "SSO configuration could not be read; continuing without SSO."); }
+        }
 
         // The external identity lands in Identity's temporary external cookie, so
         // SignInManager.GetExternalLoginInfoAsync() can pick it up in the callback and the

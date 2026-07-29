@@ -42,9 +42,7 @@ public class EmailDispatchWorker : BackgroundService
     {
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var settings = await scope.ServiceProvider.GetRequiredService<MailSettingsStore>().LoadAsync();
-
-        if (!settings.IsUsable) return;      // mail not configured yet — leave the queue alone
+        var store = scope.ServiceProvider.GetRequiredService<MailSettingsStore>();
 
         var now = DateTime.UtcNow;
         var due = await db.EmailOutbox
@@ -57,6 +55,25 @@ public class EmailDispatchWorker : BackgroundService
         due = due.Where(e => e.LastAttemptAt == null || now - e.LastAttemptAt >= RetryDelay(e.Attempts)).ToList();
         if (due.Count == 0) return;
 
+        // Each tenant may send through its own relay and sender identity (§NTF-04), so the
+        // batch is split by owning organisation and one connection is opened per group.
+        // A group whose settings are unusable is left queued — that tenant's mail waits for
+        // its configuration instead of leaving via somebody else's server.
+        foreach (var group in due.GroupBy(e => e.OrganisationId))
+        {
+            if (ct.IsCancellationRequested) break;
+            var settings = await store.LoadForOrganisationAsync(group.Key);
+            if (!settings.IsUsable) continue;
+            await SendGroupAsync(db, group.ToList(), settings, now, ct);
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Sends one tenant's due messages over a single SMTP connection.</summary>
+    private async Task SendGroupAsync(AppDbContext db, List<EmailOutbox> due, MailSettings settings,
+        DateTime now, CancellationToken ct)
+    {
         using var smtp = new SmtpClient();
         try
         {
@@ -71,8 +88,7 @@ public class EmailDispatchWorker : BackgroundService
             // try again next cycle rather than burning attempts one message at a time.
             _log.LogWarning(ex, "SMTP connection failed ({Host}:{Port})", settings.Host, settings.Port);
             foreach (var m in due) { m.Attempts++; m.LastAttemptAt = now; m.LastError = Short(ex); }
-            await db.SaveChangesAsync(ct);
-            return;
+            return;      // the caller saves once for the whole cycle
         }
 
         foreach (var m in due)
@@ -97,7 +113,6 @@ public class EmailDispatchWorker : BackgroundService
         }
 
         try { await smtp.DisconnectAsync(true, ct); } catch { /* closing is best-effort */ }
-        await db.SaveChangesAsync(ct);
     }
 
     private static MimeMessage Build(EmailOutbox m, MailSettings s)

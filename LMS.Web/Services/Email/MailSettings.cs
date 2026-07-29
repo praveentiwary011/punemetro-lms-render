@@ -73,6 +73,42 @@ public class MailSettingsStore
         return s;
     }
 
+    /// <summary>Settings to send a message belonging to <paramref name="organisationId"/>:
+    /// that tenant's own configuration when it has one that is enabled and usable, otherwise
+    /// the platform default (§NTF-04). Platform-level mail — anything with no tenant — always
+    /// uses the default. Falling back rather than failing means adding a tenant never silently
+    /// stops its mail, while a tenant that needs its own sender identity can have one.</summary>
+    public async Task<MailSettings> LoadForOrganisationAsync(int? organisationId)
+    {
+        var platform = await LoadAsync();
+        if (organisationId == null) return platform;
+
+        var row = await _db.OrganisationMailSettings.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.OrganisationId == organisationId);
+        if (row == null || !row.IsEnabled) return platform;
+
+        var s = new MailSettings
+        {
+            Enabled = true,
+            Host = row.Host,
+            Port = row.Port,
+            UseStartTls = row.UseStartTls,
+            User = row.User,
+            FromAddress = row.FromAddress,
+            FromName = row.FromName,
+            // A tenant on the shared host need not restate the base URL.
+            BaseUrl = string.IsNullOrWhiteSpace(row.BaseUrl) ? platform.BaseUrl : row.BaseUrl.TrimEnd('/')
+        };
+        if (!string.IsNullOrEmpty(row.PasswordProtected))
+        {
+            try { s.Password = _dp.CreateProtector(Purpose).Unprotect(row.PasswordProtected); }
+            catch { s.Password = ""; }
+        }
+
+        // An incomplete tenant row must not black-hole that tenant's mail.
+        return s.IsUsable ? s : platform;
+    }
+
     public string Protect(string plain) => _dp.CreateProtector(Purpose).Protect(plain);
 
     public async Task SaveAsync(Dictionary<string, string> values)

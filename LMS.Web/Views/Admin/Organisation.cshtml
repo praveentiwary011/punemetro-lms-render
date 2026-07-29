@@ -304,6 +304,107 @@
     </div>
 </div>
 
+
+@{
+    var mail = (OrganisationMailSetting?)ViewBag.Mail;
+    var platformMail = (LMS.Web.Services.Email.MailSettings)ViewBag.PlatformMail;
+    var mailHasPassword = (bool)ViewBag.MailHasPassword;
+    var usingOwn = mail != null && mail.IsEnabled;
+}
+<div class="card mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-envelope-at me-2"></i>Email notifications</span>
+        @if (usingOwn)
+        {
+            <span class="badge text-bg-success-subtle text-success-emphasis border border-success-subtle">Sends its own mail</span>
+        }
+        else
+        {
+            <span class="badge text-bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle">Uses the platform default</span>
+        }
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Give this organisation its own mail server and sender identity. Leave it switched off and
+            its mail goes out through the platform default
+            (@(platformMail.IsUsable ? $"{platformMail.FromAddress} via {platformMail.Host}" : "not configured yet")).
+            A tenant sending as its own domain normally needs its own relay, or the mail fails SPF/DKIM checks
+            and is treated as spam.
+        </p>
+
+        <form method="post" asp-action="SaveOrganisationMail" class="row g-3">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="organisationId" value="@Model.Id" />
+
+            <div class="col-12">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="enabled" value="true" id="orgMailEnabled" @(usingOwn ? "checked" : "") />
+                    <label class="form-check-label" for="orgMailEnabled">This organisation sends its own mail</label>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Mail server (SMTP host)</label>
+                <input name="host" value="@(mail?.Host)" class="form-control" placeholder="smtp.punemetro.in" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Port</label>
+                <input name="port" type="number" value="@(mail?.Port ?? 587)" class="form-control" />
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" name="useStartTls" value="true" id="orgMailTls" @(mail == null || mail.UseStartTls ? "checked" : "") />
+                    <label class="form-check-label" for="orgMailTls">Use STARTTLS</label>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Username</label>
+                <input name="user" value="@(mail?.User)" class="form-control" autocomplete="off" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Password</label>
+                <input name="password" type="password" class="form-control" autocomplete="new-password"
+                       placeholder="@(mailHasPassword ? "Stored — leave blank to keep it" : "")" />
+                <div class="form-text">Encrypted before it is stored and never shown again.</div>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">From address</label>
+                <input name="fromAddress" value="@(mail?.FromAddress)" class="form-control" placeholder="training@punemetro.in" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">From name</label>
+                <input name="fromName" value="@(mail?.FromName)" class="form-control" placeholder="@Model.Name Training" />
+            </div>
+
+            <div class="col-12">
+                <label class="form-label">Link base URL <span class="text-muted small">(optional)</span></label>
+                <input name="baseUrl" value="@(mail?.BaseUrl)" class="form-control" placeholder="@(string.IsNullOrEmpty(platformMail.BaseUrl) ? "https://lms.example.com" : platformMail.BaseUrl)" />
+                <div class="form-text">Used for links inside this tenant's emails. Leave blank to use the platform value.</div>
+            </div>
+
+            <div class="col-12">
+                <button class="btn btn-primary">Save mail settings</button>
+            </div>
+        </form>
+
+        <hr class="my-4" />
+        <form method="post" asp-action="SendOrganisationTestEmail" class="row g-2 align-items-end">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="organisationId" value="@Model.Id" />
+            <div class="col-md-6">
+                <label class="form-label">Send a test message to</label>
+                <input name="to" type="email" class="form-control" placeholder="you@@example.com" />
+            </div>
+            <div class="col-md-6">
+                <button class="btn btn-outline-primary">Send test</button>
+                <span class="form-text ms-2">Goes through whichever configuration this tenant resolves to.</span>
+            </div>
+        </form>
+    </div>
+</div>
+
 @section Scripts {
 <script nonce="@Context.CspNonce()">
     // Subscription license: exactly ONE validity option may be entered — the mode

@@ -32,8 +32,12 @@ public class AdminController : Controller
         _emailQueue = emailQueue;
     }
 
-    // ---------- Email notifications (§NOT-05..07) ----------
+    // ---------- Email notifications (§NOT-05..07, §NTF-04) ----------
+    // These screens govern the PLATFORM DEFAULT, which every tenant without its own
+    // configuration sends through — so they belong to the Super User, not to a tenant's
+    // Admin. Per-tenant configuration lives on the organisation detail page.
 
+    [Authorize(Roles = "SuperUser")]
     public async Task<IActionResult> MailSettings()
     {
         var s = await _mail.LoadAsync();
@@ -46,6 +50,7 @@ public class AdminController : Controller
         return View(s);
     }
 
+    [Authorize(Roles = "SuperUser")]
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveMailSettings(bool enabled, string host, int port, bool useStartTls,
         string? user, string? password, string fromAddress, string? fromName, string? baseUrl)
@@ -104,6 +109,7 @@ public class AdminController : Controller
 
     /// <summary>Queues one test message to the address given. It goes through the same
     /// outbox and worker as everything else, so a success here proves the whole path.</summary>
+    [Authorize(Roles = "SuperUser")]
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> SendTestEmail(string to)
     {
@@ -615,6 +621,86 @@ public class AdminController : Controller
         return RedirectToAction("Organisations");
     }
 
+    /// <summary>Set or clear one tenant's own mail configuration (§NTF-04). Leaving it
+    /// disabled — or clearing it — returns that tenant to the platform default. The password
+    /// is encrypted before storage and never sent back to the browser, so an empty password
+    /// field means "keep the stored one", exactly as the SSO client secret behaves.</summary>
+    [Authorize(Roles = "SuperUser")]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveOrganisationMail(int organisationId, bool enabled, string? host,
+        int port, bool useStartTls, string? user, string? password, string? fromAddress, string? fromName,
+        string? baseUrl)
+    {
+        var org = await _db.Organisations.FirstOrDefaultAsync(o => o.Id == organisationId);
+        if (org == null) return NotFound();
+
+        if (enabled && (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(fromAddress)))
+        {
+            TempData["Err"] = "A mail server and a From address are required before this tenant can send its own mail.";
+            return RedirectToAction("Organisation", new { id = organisationId });
+        }
+
+        var row = await _db.OrganisationMailSettings.FirstOrDefaultAsync(m => m.OrganisationId == organisationId);
+        if (row == null)
+        {
+            row = new OrganisationMailSetting { OrganisationId = organisationId };
+            _db.OrganisationMailSettings.Add(row);
+        }
+
+        row.IsEnabled = enabled;
+        row.Host = (host ?? "").Trim();
+        row.Port = port <= 0 ? 587 : port;
+        row.UseStartTls = useStartTls;
+        row.User = (user ?? "").Trim();
+        row.FromAddress = (fromAddress ?? "").Trim();
+        row.FromName = (fromName ?? "").Trim();
+        row.BaseUrl = (baseUrl ?? "").Trim().TrimEnd('/');
+        if (!string.IsNullOrWhiteSpace(password)) row.PasswordProtected = _mail.Protect(password);
+        row.UpdatedAt = DateTime.UtcNow;
+
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "",
+            enabled ? "EnableOrganisationMail" : "DisableOrganisationMail",
+            $"{org.Name}{(enabled ? $" via {row.Host}" : " — reverted to the platform default")}");
+        await _db.SaveChangesAsync();
+        TempData["Ok"] = enabled
+            ? $"{org.Name} now sends its own mail."
+            : $"{org.Name} will use the platform default.";
+        return RedirectToAction("Organisation", new { id = organisationId });
+    }
+
+    /// <summary>Queues a test message through whichever configuration this tenant resolves
+    /// to, so the Super User can prove a tenant's relay before real mail depends on it.</summary>
+    [Authorize(Roles = "SuperUser")]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendOrganisationTestEmail(int organisationId, string to)
+    {
+        var org = await _db.Organisations.FirstOrDefaultAsync(o => o.Id == organisationId);
+        if (org == null) return NotFound();
+
+        var s = await _mail.LoadForOrganisationAsync(organisationId);
+        if (!s.IsUsable)
+        {
+            TempData["Err"] = "Neither this tenant nor the platform default has a usable mail configuration.";
+            return RedirectToAction("Organisation", new { id = organisationId });
+        }
+        if (string.IsNullOrWhiteSpace(to))
+        {
+            TempData["Err"] = "Enter an address to send the test to.";
+            return RedirectToAction("Organisation", new { id = organisationId });
+        }
+
+        var (subject, html) = Services.Email.EmailTemplates.Test(org.Name);
+        _db.EmailOutbox.Add(new EmailOutbox
+        {
+            ToAddress = to.Trim(), ToName = "", Subject = subject, HtmlBody = html,
+            Kind = EmailKind.Test, OrganisationId = organisationId
+        });
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "", "SendOrganisationTestEmail", $"{org.Name} → {to}");
+        await _db.SaveChangesAsync();
+        TempData["Ok"] = $"Test queued to {to} using {(s.FromAddress)} — it sends within a minute.";
+        return RedirectToAction("Organisation", new { id = organisationId });
+    }
+
     [Authorize(Roles = "SuperUser")]
     /// <summary>Organisation detail: profile, custom roles, and this tenant's users.</summary>
     public async Task<IActionResult> Organisation(int id)
@@ -625,6 +711,11 @@ public class AdminController : Controller
             .Include(o => o.Licenses.OrderByDescending(l => l.StartDate)).ThenInclude(l => l.CreatedBy)
             .FirstOrDefaultAsync(o => o.Id == id);
         if (org == null) return NotFound();
+
+        var mail = await _db.OrganisationMailSettings.AsNoTracking().FirstOrDefaultAsync(m => m.OrganisationId == id);
+        ViewBag.Mail = mail;
+        ViewBag.MailHasPassword = !string.IsNullOrEmpty(mail?.PasswordProtected);
+        ViewBag.PlatformMail = await _mail.LoadAsync();       // what this tenant falls back to
 
         var users = await _db.Users.Where(u => u.OrganisationId == id).OrderBy(u => u.FullName).ToListAsync();
         var withRoles = new List<(ApplicationUser User, IList<string> Roles)>();
