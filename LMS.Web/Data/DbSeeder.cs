@@ -720,10 +720,16 @@ public static class DbSeeder
             });
 
         var videoTopics = new[] { "Orientation", "Safety", "Operations", "Customer Service", "Engineering", "Signalling" };
+        // Real, embeddable Pune Metro Rail videos (verified public + embeddable). The
+        // previous placeholder IDs had been removed from YouTube (404) or pointed at an
+        // unrelated .NET tutorial, so the hub showed broken/irrelevant players.
         var videoUrls = new[]
         {
-            "https://www.youtube.com/embed/2W1Zqn0YtEo", "https://www.youtube.com/embed/0y1eKPZbGxo",
-            "https://www.youtube.com/embed/8bqjsrhLgMc", "https://www.youtube.com/embed/eIHKZfgddLM"
+            "https://www.youtube.com/embed/RDNvPt7Inoc", // The ultimate guide & virtual tour
+            "https://www.youtube.com/embed/HyYDb34OtDA", // Pune Metro Rail Project
+            "https://www.youtube.com/embed/QBAR2BclSTU", // Inaugural journey: Ruby Hall to PCMC
+            "https://www.youtube.com/embed/hb-DxH700G0", // Updates from Swargate Metro Station
+            "https://www.youtube.com/embed/__Ansb3N8_k"  // Foundation stone, Phase-1
         };
         var videoTitles = new[]
         {
