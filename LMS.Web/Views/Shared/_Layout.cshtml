@@ -614,10 +614,34 @@
             // submenu opened just above also has to be laid out before the item's
             // position is final. Retry briefly (setTimeout, not rAF, so a
             // background tab still settles) until the measurement is usable.
-            var tries = 0;
-            (function attempt() {
+            // Timing is the whole game here. This script sits inline after bundle.js, but
+            // SimpleBar auto-initialises from `data-simplebar` on DOMContentLoaded — which
+            // fires only once the parser passes this point. So on the first attempt the
+            // scroll container does not exist yet, and anything deferred with a timer lands
+            // AFTER the first paint: the menu draws at the top, then visibly jumps down to
+            // the selected item. That jump is the flicker on the items far enough down the
+            // menu to need scrolling (Learning Records, Audit Log, Communication Center,
+            // Course Catalog).
+            //
+            // So: try now, and if SimpleBar is not ready, retry on DOMContentLoaded — our
+            // listener is registered after the theme's, so SimpleBar has already built the
+            // container by the time ours runs, and we scroll in the same task, before paint.
+            // requestAnimationFrame covers a late initialisation (it too runs before the next
+            // paint); one timer at the end is the last resort for a background tab, where rAF
+            // is suspended and nothing is visible to flicker anyway.
+            (function () {
                 if (revealInSidebar(best)) return;
-                if (++tries < 25) setTimeout(attempt, 40);
+                var tries = 0;
+                function attempt() {
+                    if (revealInSidebar(best)) return;
+                    if (++tries < 20) requestAnimationFrame(attempt);
+                    else setTimeout(function () { revealInSidebar(best); }, 200);
+                }
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', attempt, { once: true });
+                } else {
+                    attempt();
+                }
             })();
         }
 
