@@ -71,7 +71,10 @@ public static class UploadHelper
     /// markup types (.html, .svg, .js, .exe, …) are rejected — they would otherwise be
     /// served from the site origin and enable stored XSS / malware distribution.</summary>
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    { ".pdf", ".pptx", ".docx", ".xlsx", ".csv", ".txt", ".mp4", ".webm", ".mov", ".ogv", ".mp3", ".zip" };
+    { ".pdf", ".pptx", ".docx", ".xlsx", ".csv", ".txt", ".mp4", ".webm", ".mov", ".ogv", ".mp3", ".zip",
+      // Caption/transcript formats — what a video platform exports, so a trainer can
+      // attach a video's spoken content for the AI to reference (§AIG-14).
+      ".vtt", ".srt", ".md" };
 
     /// <summary>
     /// Saves an uploaded image (signature, logo) after validating it by actually

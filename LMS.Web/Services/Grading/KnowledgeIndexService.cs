@@ -32,7 +32,8 @@ public class KnowledgeIndexService
         var lessons = await (from l in _db.Lessons.IgnoreQueryFilters()
                              join m in _db.Modules on l.ModuleId equals m.Id
                              where courseIds.Contains(m.CourseId)
-                             select new { l.Id, l.Title, l.Content, m.CourseId }).ToListAsync(ct);
+                             select new { l.Id, l.Title, l.Content, l.ExtractedText, l.Type, m.CourseId })
+                             .ToListAsync(ct);
 
         int written = 0;
         foreach (var c in courses)
@@ -40,8 +41,24 @@ public class KnowledgeIndexService
                 $"course:{c.Id}", $"Course: {c.Title}", c.Description, ct);
 
         foreach (var l in lessons)
+        {
+            // Authored rich text (Text lessons).
             written += await IndexSourceAsync(organisationId, l.CourseId, KnowledgeSourceType.Lesson,
                 $"lesson:{l.Id}", $"Lesson: {l.Title}", TextChunker.HtmlToText(l.Content), ct);
+
+            // Uploaded documents and video transcripts (§AIG-14). These carry no `Content`, so
+            // before this they were indexed as nothing and the material was invisible to grading.
+            // Indexed under their own source type so a citation says which kind of material it came from.
+            if (!string.IsNullOrWhiteSpace(l.ExtractedText))
+            {
+                var kind = l.Type == LessonType.Video
+                    ? KnowledgeSourceType.VideoTranscript
+                    : KnowledgeSourceType.Document;
+                var label = l.Type == LessonType.Video ? $"Video transcript: {l.Title}" : $"Document: {l.Title}";
+                written += await IndexSourceAsync(organisationId, l.CourseId, kind,
+                    $"material:{l.Id}", label, l.ExtractedText, ct);
+            }
+        }
 
         await _db.SaveChangesAsync(ct);
         _log.LogInformation("Knowledge index rebuilt for org {Org}: {N} chunks.", organisationId, written);

@@ -30,6 +30,7 @@ public static class SchemaUpgrader
         Run(db, log, $"ALTER TABLE Questions ADD ReferenceAnswer {txt} NULL");
         Run(db, log, $"ALTER TABLE QuizAnswers ADD GradingPending {intc} NOT NULL DEFAULT 0");
         Run(db, log, $"ALTER TABLE Quizzes ADD GeneratedByAi {intc} NOT NULL DEFAULT 0");
+        Run(db, log, $"ALTER TABLE Lessons ADD ExtractedText {txt} NULL");
 
         Run(db, log, $@"CREATE TABLE IF NOT EXISTS SsoConfigurations (
             Id {pk},

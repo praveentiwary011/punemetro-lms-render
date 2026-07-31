@@ -95,7 +95,8 @@ public class QuizGenerator
                              join m in _db.Modules on l.ModuleId equals m.Id
                              where m.CourseId == courseId
                              orderby m.Order, l.Order
-                             select new { m.Title, LessonTitle = l.Title, l.Content }).ToListAsync(ct);
+                             select new { m.Title, LessonTitle = l.Title, l.Content, l.ExtractedText, l.Type })
+                             .ToListAsync(ct);
 
         var sb = new StringBuilder();
         sb.AppendLine($"COURSE: {course.Title}");
@@ -103,10 +104,16 @@ public class QuizGenerator
             sb.AppendLine(TextChunker.HtmlToText(course.Description));
         foreach (var l in lessons)
         {
+            // Authored text, plus the text of an uploaded document or a video transcript —
+            // a course whose material is entirely PDFs and videos generated nothing before.
             var body = TextChunker.HtmlToText(l.Content);
+            if (string.IsNullOrWhiteSpace(body) && !string.IsNullOrWhiteSpace(l.ExtractedText))
+                body = l.ExtractedText;
             if (string.IsNullOrWhiteSpace(body)) continue;
+            var kind = l.Type == LessonType.Video ? " (video transcript)"
+                     : l.Type == LessonType.File ? " (document)" : "";
             sb.AppendLine();
-            sb.AppendLine($"--- {l.Title} / {l.LessonTitle} ---");
+            sb.AppendLine($"--- {l.Title} / {l.LessonTitle}{kind} ---");
             sb.AppendLine(body);
         }
 

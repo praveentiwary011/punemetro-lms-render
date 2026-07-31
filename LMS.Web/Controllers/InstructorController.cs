@@ -1,6 +1,7 @@
 using LMS.Web.Data;
 using LMS.Web.Models;
 using LMS.Web.Services;
+using LMS.Web.Services.Grading;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -375,7 +376,7 @@ public class InstructorController : Controller
 
     [HttpPost, ValidateAntiForgeryToken]
     [RequestSizeLimit(200_000_000)]
-    public async Task<IActionResult> AddLesson(int moduleId, string title, LessonType type, string? content, string? url, int durationMinutes, IFormFile? file)
+    public async Task<IActionResult> AddLesson(int moduleId, string title, LessonType type, string? content, string? url, int durationMinutes, IFormFile? file, string? transcript = null, IFormFile? transcriptFile = null)
     {
         var module = await _db.Modules.Include(m => m.Course).Include(m => m.Lessons).FirstOrDefaultAsync(m => m.Id == moduleId);
         if (module == null || !await CourseAccess.CanEditAsync(_db, User, module.Course!)) return NotFound();
@@ -384,14 +385,83 @@ public class InstructorController : Controller
         var fileUrl = await SaveLessonFileAsync(file);
         if (fileUrl != null && type != LessonType.Video) type = LessonType.File;
 
-        module.Lessons.Add(new Lesson
+        var lesson = new Lesson
         {
             Title = title, Type = type, Content = HtmlSanitizer.Clean(content), Url = fileUrl ?? url,
             DurationMinutes = durationMinutes <= 0 ? 10 : durationMinutes,
-            Order = module.Lessons.Count + 1
-        });
+            Order = module.Lessons.Count + 1,
+            ExtractedText = await MaterialTextAsync(fileUrl, transcript, transcriptFile)
+        };
+        module.Lessons.Add(lesson);
         await _db.SaveChangesAsync();
+
+        // Tell the trainer plainly whether this material can be referenced by the AI — a scanned
+        // PDF has no text layer and would otherwise be added silently and never used.
+        if (fileUrl != null && string.IsNullOrWhiteSpace(lesson.ExtractedText))
+            TempData["Err"] = $"\"{title}\" was uploaded, but no text could be read from it "
+                + "(a scanned PDF has no text layer). The AI cannot reference it until you paste "
+                + "its text in, using Material text on the lesson.";
+        else if (!string.IsNullOrWhiteSpace(lesson.ExtractedText))
+            TempData["Ok"] = $"\"{title}\" added — {lesson.ExtractedText.Split(' ').Length} words are now "
+                + "available to the AI for grading and quiz generation. Re-index to apply immediately.";
+
         return RedirectToAction("ManageCourse", new { id = module.CourseId });
+    }
+
+    /// <summary>Text the AI can reference for this material (§AIG-14): extracted from an uploaded
+    /// document, or the transcript a trainer supplies for a video (pasted, or a .vtt/.srt/.txt
+    /// caption file exported from the video platform).</summary>
+    private async Task<string?> MaterialTextAsync(string? fileUrl, string? transcript, IFormFile? transcriptFile)
+    {
+        if (transcriptFile is { Length: > 0 })
+        {
+            var saved = await UploadHelper.SaveAsync(transcriptFile, _env, "transcripts");
+            if (saved != null)
+            {
+                var abs = Path.Combine(_env.WebRootPath, saved.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+                var text = MaterialTextExtractor.Extract(abs);
+                if (!string.IsNullOrWhiteSpace(text)) return text;
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(transcript)) return transcript.Trim();
+
+        if (!string.IsNullOrWhiteSpace(fileUrl))
+        {
+            var abs = Path.Combine(_env.WebRootPath, fileUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            if (MaterialTextExtractor.CanExtract(abs)) return MaterialTextExtractor.Extract(abs);
+        }
+        return null;
+    }
+
+    /// <summary>Set or replace the AI-readable text of an existing material — used to add a video
+    /// transcript, or to supply the text of a scanned document extraction could not read.</summary>
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetMaterialText(int id, string? transcript, IFormFile? transcriptFile)
+    {
+        var lesson = await _db.Lessons.Include(l => l.Module)!.ThenInclude(m => m!.Course)
+            .FirstOrDefaultAsync(l => l.Id == id);
+        if (lesson == null || !await CourseAccess.CanEditAsync(_db, User, lesson.Module!.Course!)) return NotFound();
+
+        var text = await MaterialTextAsync(null, transcript, transcriptFile);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            // Re-extract from the stored file when nothing new was supplied (e.g. after an upgrade
+            // that added extraction to material uploaded before it existed).
+            if (!string.IsNullOrWhiteSpace(lesson.Url) && !lesson.Url.StartsWith("http"))
+            {
+                var abs = Path.Combine(_env.WebRootPath, lesson.Url.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+                if (MaterialTextExtractor.CanExtract(abs)) text = MaterialTextExtractor.Extract(abs);
+            }
+        }
+
+        lesson.ExtractedText = string.IsNullOrWhiteSpace(text) ? null : text;
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "", "SetMaterialText",
+            $"{lesson.Module!.Course!.Title} / {lesson.Title}: {(lesson.ExtractedText?.Split(' ').Length ?? 0)} words");
+        await _db.SaveChangesAsync();
+        TempData[lesson.ExtractedText == null ? "Err" : "Ok"] = lesson.ExtractedText == null
+            ? "No text could be read. Paste the text in directly so the AI can reference this material."
+            : $"Saved — {lesson.ExtractedText.Split(' ').Length} words are now available to the AI. Re-index to apply immediately.";
+        return RedirectToAction("ManageCourse", new { id = lesson.Module!.CourseId });
     }
 
     [HttpPost, ValidateAntiForgeryToken]

@@ -101,17 +101,70 @@
                 <ul class="list-group list-group-flush">
                     @foreach (var lesson in module.Lessons)
                     {
+                        var aiWords = string.IsNullOrWhiteSpace(lesson.ExtractedText)
+                            ? 0 : lesson.ExtractedText.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+                        var needsText = lesson.Type == LessonType.File || lesson.Type == LessonType.Video;
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             <span>
                                 <i class="bi @(lesson.Type == LessonType.Video ? "bi-play-circle" : lesson.Type == LessonType.File ? "bi-file-earmark" : lesson.Type == LessonType.Link ? "bi-link-45deg" : "bi-file-text") me-2"></i>
                                 @lesson.Title <span class="text-muted small">· @lesson.DurationMinutes min</span>
+                                @if (needsText && aiWords > 0)
+                                {
+                                    <span class="badge text-bg-success-subtle text-success-emphasis border border-success-subtle ms-2"
+                                          title="This material's text is available to the AI for grading and quiz generation">
+                                        <i class="bi bi-robot me-1"></i><span>AI-readable · @aiWords words</span>
+                                    </span>
+                                }
+                                else if (needsText)
+                                {
+                                    <span class="badge text-bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2"
+                                          title="The AI cannot reference this material until it has text">
+                                        <i class="bi bi-exclamation-triangle me-1"></i><span>@(lesson.Type == LessonType.Video ? "No transcript" : "No text read")</span>
+                                    </span>
+                                }
                             </span>
-                            <form method="post" asp-action="DeleteLesson">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="id" value="@lesson.Id" />
-                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i></button>
-                            </form>
+                            <span class="d-flex gap-1">
+                                @if (needsText)
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                                            data-bs-target="#mat-@lesson.Id" title="Supply the text the AI should reference">
+                                        <i class="bi bi-card-text me-1"></i><span>Material text</span>
+                                    </button>
+                                }
+                                <form method="post" asp-action="DeleteLesson" class="m-0">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@lesson.Id" />
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                            </span>
                         </li>
+                        @if (needsText)
+                        {
+                            <li class="list-group-item collapse bg-light" id="mat-@lesson.Id">
+                                <form method="post" asp-action="SetMaterialText" enctype="multipart/form-data" class="row g-2">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@lesson.Id" />
+                                    <div class="col-12 small text-muted">
+                                        @if (lesson.Type == LessonType.Video)
+                                        {
+                                            <text>Paste the transcript, or upload the caption file (<code>.vtt</code>/<code>.srt</code>) your video platform exports. Without it the AI cannot reference what is said in this video.</text>
+                                        }
+                                        else
+                                        {
+                                            <text>Text is read from the document automatically on upload. Paste it here if the file is a scan, or upload a text version. Leave both blank and save to re-read the stored file.</text>
+                                        }
+                                    </div>
+                                    <div class="col-md-8">
+                                        <textarea name="transcript" rows="3" class="form-control form-control-sm"
+                                                  placeholder="@(lesson.Type == LessonType.Video ? "Paste the transcript…" : "Paste the document text…")">@lesson.ExtractedText</textarea>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <input type="file" name="transcriptFile" class="form-control form-control-sm" accept=".txt,.vtt,.srt,.md,.csv,.pdf,.docx,.pptx" />
+                                        <button class="btn btn-sm btn-primary mt-2 w-100">Save material text</button>
+                                    </div>
+                                </form>
+                            </li>
+                        }
                     }
                     <li class="list-group-item bg-light">
                         <form method="post" asp-controller="Scorm" asp-action="Upload" enctype="multipart/form-data" class="row g-2 align-items-end mb-2">

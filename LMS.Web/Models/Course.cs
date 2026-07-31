@@ -78,6 +78,13 @@ public class Lesson
     public string? Url { get; set; }
     public int Order { get; set; }
     public int DurationMinutes { get; set; } = 10;
+    /// <summary>Machine-readable text for this material, so the AI can reference it (§AIG-14).
+    /// For an uploaded document it is the text extracted on upload; for a video it is the
+    /// transcript the trainer supplies. `Content` holds authored rich text and is empty for
+    /// file/video lessons — which is precisely why those materials were invisible to grading
+    /// and quiz generation until this existed.</summary>
+    public string? ExtractedText { get; set; }
+
     /// <summary>Set when Type == Scorm: the SCORM 1.2 / cmi5 package to launch.</summary>
     public int? ContentPackageId { get; set; }
     public ContentPackage? ContentPackage { get; set; }
