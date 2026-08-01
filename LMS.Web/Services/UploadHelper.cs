@@ -115,6 +115,26 @@ public static class UploadHelper
     public static bool IsAllowedExtension(string ext) =>
         ImageExtensions.Contains(ext) || AllowedExtensions.Contains(ext);
 
+    /// <summary>Writes an upload to a temporary file so its contents can be read, and returns that
+    /// path for the caller to delete. For uploads whose *text* is the point — a video transcript is
+    /// read once into the lesson and never served — so storing the file itself would leave the
+    /// uploads folder holding something no row references.
+    ///
+    /// The same allow-list applies as for a stored upload: a type the LMS will not accept is not
+    /// one it should be opening either.</summary>
+    public static async Task<string?> SaveTempAsync(IFormFile? file)
+    {
+        if (file == null || file.Length == 0) return null;
+        var ext = Path.GetExtension(file.FileName);
+        if (!IsAllowedExtension(ext)) return null;
+
+        // The extension is kept because the text extractor chooses its reader from it.
+        var path = Path.Combine(Path.GetTempPath(), $"lms-upload-{Guid.NewGuid():N}{ext}");
+        await using (var stream = File.Create(path))
+            await file.CopyToAsync(stream);
+        return path;
+    }
+
     public static async Task<string?> SaveAsync(IFormFile? file, IWebHostEnvironment env, string subfolder)
     {
         if (file == null || file.Length == 0) return null;

@@ -415,12 +415,22 @@ public class InstructorController : Controller
     {
         if (transcriptFile is { Length: > 0 })
         {
-            var saved = await UploadHelper.SaveAsync(transcriptFile, _env, "transcripts");
-            if (saved != null)
+            // Only the transcript's text is kept, on the lesson. The caption file is read from a
+            // temporary copy and deleted, rather than stored in the uploads folder where nothing
+            // would ever reference it again.
+            var tmp = await UploadHelper.SaveTempAsync(transcriptFile);
+            if (tmp != null)
             {
-                var abs = Path.Combine(_env.WebRootPath, saved.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-                var text = MaterialTextExtractor.Extract(abs);
-                if (!string.IsNullOrWhiteSpace(text)) return text;
+                try
+                {
+                    var text = MaterialTextExtractor.Extract(tmp);
+                    if (!string.IsNullOrWhiteSpace(text)) return text;
+                }
+                finally
+                {
+                    // A temporary file we cannot remove is not worth failing the upload over.
+                    try { System.IO.File.Delete(tmp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                }
             }
         }
         if (!string.IsNullOrWhiteSpace(transcript)) return transcript.Trim();
