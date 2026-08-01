@@ -70,9 +70,6 @@ public class NewCourseDigestJob : IEmailJob
         var now = DateTime.Now;
         if (!ignoreSchedule && (now.DayOfWeek != SendOn || now.Hour < SendAtHour)) return 0;
 
-        var settings = await store.LoadAsync();
-        if (!settings.IsUsable) return 0;
-
         var week = NotifierHelpers.IsoWeek(now);
         var since = DateTime.UtcNow.AddDays(-7);
         var queued = 0;
@@ -80,6 +77,14 @@ public class NewCourseDigestJob : IEmailJob
         var orgs = await db.Organisations.IgnoreQueryFilters().Where(o => o.IsActive).ToListAsync(ct);
         foreach (var org in orgs)
         {
+            // Each tenant may send through its own relay (§NTF-04), so the settings are
+            // resolved PER ORGANISATION rather than once for the platform. Doing it once
+            // outside this loop meant a tenant with its own working mail server received
+            // nothing whenever the platform relay was unconfigured, and that its links
+            // used the platform address instead of its own.
+            var settings = await store.LoadForOrganisationAsync(org.Id);
+            if (!settings.IsUsable) continue;      // this tenant has no usable relay yet
+
             // Newly published courses visible to this tenant: its own, plus shared ones.
             var fresh = await db.Courses.IgnoreQueryFilters()
                 .Where(c => c.IsPublished && c.IsActive
@@ -133,8 +138,16 @@ public class UpcomingReminderJob : IEmailJob
         var tomorrow = now.Date.AddDays(1);
         var dayAfter = tomorrow.AddDays(1);
 
-        var settings = await store.LoadAsync();
-        if (!settings.IsUsable) return 0;
+        // Relay settings are per tenant (§NTF-04) and resolved lazily below, once per
+        // organisation encountered — a learner whose tenant has no usable relay is skipped
+        // rather than the whole run being abandoned on the platform relay's state.
+        var settingsByOrg = new Dictionary<int?, MailSettings>();
+        async Task<MailSettings> SettingsForAsync(int? orgId)
+        {
+            if (!settingsByOrg.TryGetValue(orgId, out var s))
+                settingsByOrg[orgId] = s = await store.LoadForOrganisationAsync(orgId);
+            return s;
+        }
 
         // Courses starting tomorrow, and sessions happening tomorrow.
         var startingCourses = await db.Courses.IgnoreQueryFilters()
@@ -169,6 +182,9 @@ public class UpcomingReminderJob : IEmailJob
             if (items.Count == 0) continue;
 
             var orgId = learner.OrganisationId;
+            var settings = await SettingsForAsync(orgId);
+            if (!settings.IsUsable) continue;      // this tenant has no usable relay yet
+
             var orgName = orgId == null ? "" :
                 await db.Organisations.IgnoreQueryFilters().Where(o => o.Id == orgId).Select(o => o.Name).FirstOrDefaultAsync(ct) ?? "";
 

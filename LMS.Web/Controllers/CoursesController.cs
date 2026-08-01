@@ -154,7 +154,9 @@ public class CoursesController : Controller
                 .FirstOrDefaultAsync();
             if (user?.Email == null) return;
 
-            var baseUrl = (await _mailSettings.LoadAsync()).BaseUrl;
+            // Per-tenant relay (§NTF-04): use this learner's organisation settings so the
+            // link points at that tenant's address, falling back to the platform value.
+            var baseUrl = (await _mailSettings.LoadForOrganisationAsync(user.OrganisationId)).BaseUrl;
             var (subject, html) = Services.Email.EmailTemplates.EnrollmentConfirmed(
                 user.OrgName ?? "", user.FullName, course, baseUrl);
             await _emailQueue.EnqueueAsync(user.Email, user.FullName, subject, html,
