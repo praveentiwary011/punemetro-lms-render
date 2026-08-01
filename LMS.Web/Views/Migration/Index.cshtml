@@ -12,7 +12,7 @@
 
 <div class="alert alert-info py-2 small">
     <i class="bi bi-info-circle me-1"></i>
-    Import in dependency order — <strong>users → courses → enrolments</strong>. A row referencing a
+    Import in dependency order — <strong>users → courses → material → enrolments</strong>. A row referencing a
     learner or course that does not exist yet fails validation and names the missing key, rather than
     creating a placeholder nobody notices.
 </div>
@@ -35,9 +35,12 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label">What are you importing?</label>
-                <select name="entityType" class="form-select">
+                @* Listed in dependency order — material and enrolments both need their courses to
+                   exist first — even though CourseMaterial was added to the enum last. *@
+                <select name="entityType" class="form-select" id="entityType">
                     <option value="0">Users</option>
                     <option value="1">Courses</option>
+                    <option value="3">Course material (documents &amp; videos)</option>
                     <option value="2">Enrolments &amp; completions</option>
                 </select>
             </div>
@@ -55,6 +58,12 @@
             <div class="col-md-2">
                 <label class="form-label">Extract</label>
                 <input type="file" name="file" class="form-control" accept=".csv,.tsv,.xlsx" required />
+            </div>
+            <div class="col-md-4 d-none" id="zipRow">
+                <label class="form-label">Material archive (.zip)</label>
+                <input type="file" name="materialZip" class="form-control" accept=".zip" />
+                <div class="form-text">The documents and captions your extract's path column names,
+                    zipped with those paths intact.</div>
             </div>
             <div class="col-12"><button class="btn btn-primary"><i class="bi bi-upload me-1"></i><span>Upload and map</span></button></div>
         </form>
@@ -97,3 +106,23 @@
         </div>
     }
 </div>
+
+@section Scripts {
+<script>
+    // The archive field only applies to course material, so it stays out of the way until that is
+    // what is being imported — and becomes required when it is, since the extract's paths would
+    // otherwise all fail validation.
+    (function () {
+        var sel = document.getElementById('entityType'),
+            row = document.getElementById('zipRow');
+        if (!sel || !row) return;
+        function sync() {
+            var material = sel.value === '3';
+            row.classList.toggle('d-none', !material);
+            row.querySelector('input').required = material;
+        }
+        sel.addEventListener('change', sync);
+        sync();
+    })();
+</script>
+}

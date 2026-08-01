@@ -36,6 +36,7 @@ public static class SchemaUpgrader
         Run(db, log, $"ALTER TABLE AspNetUsers ADD ExternalId {txt} NULL");
         Run(db, log, $"ALTER TABLE Courses ADD ExternalId {txt} NULL");
         Run(db, log, $"ALTER TABLE Enrollments ADD ExternalId {txt} NULL");
+        Run(db, log, $"ALTER TABLE MigrationJobs ADD PayloadPath {txt} NULL");
 
         Run(db, log, $@"CREATE TABLE IF NOT EXISTS MigrationJobs (
             Id {pk},
@@ -49,6 +50,7 @@ public static class SchemaUpgrader
             Updated {intc} NOT NULL,
             Skipped {intc} NOT NULL,
             Failed {intc} NOT NULL,
+            PayloadPath {txt} NULL,
             CreatedById {txt} NOT NULL,
             CreatedAt {dt} NOT NULL,
             ValidatedAt {dt} NULL,

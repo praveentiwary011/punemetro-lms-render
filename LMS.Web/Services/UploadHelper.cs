@@ -110,6 +110,11 @@ public static class UploadHelper
         }
     }
 
+    /// <summary>The same allow-list a normal upload is held to, so migrated material cannot
+    /// introduce a file type the LMS would otherwise refuse (§MIG-08).</summary>
+    public static bool IsAllowedExtension(string ext) =>
+        ImageExtensions.Contains(ext) || AllowedExtensions.Contains(ext);
+
     public static async Task<string?> SaveAsync(IFormFile? file, IWebHostEnvironment env, string subfolder)
     {
         if (file == null || file.Length == 0) return null;

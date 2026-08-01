@@ -20,7 +20,10 @@ public class MigrationController : Controller
 {
     private readonly AppDbContext _db;
     private readonly MigrationEngine _engine;
-    public MigrationController(AppDbContext db, MigrationEngine engine) { _db = db; _engine = engine; }
+    private readonly IWebHostEnvironment _env;
+
+    public MigrationController(AppDbContext db, MigrationEngine engine, IWebHostEnvironment env)
+    { _db = db; _engine = engine; _env = env; }
 
     /// <summary>Step 1 — target tenant and entity, plus the history of previous jobs.</summary>
     public async Task<IActionResult> Index()
@@ -44,7 +47,7 @@ public class MigrationController : Controller
     /// the tenant here; rows land in MigrationRow and are validated from there.</summary>
     [HttpPost, ValidateAntiForgeryToken, RequestSizeLimit(50_000_000)]
     public async Task<IActionResult> Upload(int organisationId, MigrationEntity entityType,
-        MigrationSource sourceSystem, IFormFile? file)
+        MigrationSource sourceSystem, IFormFile? file, IFormFile? materialZip)
     {
         if (file is not { Length: > 0 }) { TempData["Err"] = "Choose a CSV or Excel file to upload."; return RedirectToAction("Index"); }
         if (!TabularReader.IsSupported(file.FileName))
@@ -63,6 +66,15 @@ public class MigrationController : Controller
         }
         if (rows.Count == 0) { TempData["Err"] = "The file has a header but no data rows."; return RedirectToAction("Index"); }
 
+        // Material rows name files; without the archive there is nothing to name (§MIG-08).
+        if (entityType == MigrationEntity.CourseMaterial && materialZip is not { Length: > 0 })
+        {
+            TempData["Err"] = "Course material also needs the ZIP archive holding the files the extract refers to.";
+            return RedirectToAction("Index");
+        }
+        if (materialZip is { Length: > 0 } && !materialZip.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        { TempData["Err"] = "The material archive must be a .zip file."; return RedirectToAction("Index"); }
+
         var job = new MigrationJob
         {
             OrganisationId = organisationId, EntityType = entityType, SourceSystem = sourceSystem,
@@ -71,6 +83,28 @@ public class MigrationController : Controller
         };
         _db.MigrationJobs.Add(job);
         await _db.SaveChangesAsync();
+
+        // The archive is stored under App_Data — outside the web root, so it is never served —
+        // and only after the size guards have cleared it.
+        if (materialZip is { Length: > 0 })
+        {
+            var path = MaterialPayload.PathFor(_env, job.Id);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using (var fs = System.IO.File.Create(path))
+                await materialZip.CopyToAsync(fs);
+
+            var (ok, zipErr) = MaterialPayload.Check(path);
+            if (!ok)
+            {
+                System.IO.File.Delete(path);
+                _db.MigrationJobs.Remove(job);
+                await _db.SaveChangesAsync();
+                TempData["Err"] = zipErr;
+                return RedirectToAction("Index");
+            }
+            job.PayloadPath = path;
+            await _db.SaveChangesAsync();
+        }
 
         int n = 1;
         foreach (var r in rows)

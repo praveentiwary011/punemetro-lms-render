@@ -2,6 +2,7 @@ using System.Text.Json;
 using LMS.Web.Data;
 using LMS.Web.Models;
 using Microsoft.AspNetCore.Identity;
+using LMS.Web.Services.Grading;
 using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Web.Services.Migration;
@@ -19,8 +20,10 @@ public class MigrationEngine
 {
     private readonly AppDbContext _db;
     private readonly UserManager<ApplicationUser> _users;
+    private readonly IWebHostEnvironment _env;
 
-    public MigrationEngine(AppDbContext db, UserManager<ApplicationUser> users) { _db = db; _users = users; }
+    public MigrationEngine(AppDbContext db, UserManager<ApplicationUser> users, IWebHostEnvironment env)
+    { _db = db; _users = users; _env = env; }
 
     private static Dictionary<string, string> Raw(MigrationRow r) =>
         JsonSerializer.Deserialize<Dictionary<string, string>>(r.RawJson) ?? new();
@@ -48,6 +51,22 @@ public class MigrationEngine
         var courseByCode = await _db.Courses.IgnoreQueryFilters()
             .Where(c => c.OrganisationId == job.OrganisationId)
             .ToDictionaryAsync(c => c.Code, c => c.Id, StringComparer.OrdinalIgnoreCase, ct);
+
+        // Entry names of the accompanying archive, so a material row can be checked against what
+        // was actually uploaded (§MIG-08).
+        var zipEntries = job.EntityType == MigrationEntity.CourseMaterial && job.PayloadPath != null
+            ? MaterialPayload.Entries(job.PayloadPath)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Material already in these courses, keyed the same way the commit identifies it, so the
+        // dry run can say "will update" where the commit will in fact update.
+        var materialKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (job.EntityType == MigrationEntity.CourseMaterial)
+            foreach (var l in await _db.Lessons.IgnoreQueryFilters()
+                         .Where(l => l.Module!.Course!.OrganisationId == job.OrganisationId)
+                         .Select(l => new { l.Module!.CourseId, Module = l.Module!.Title, l.Title })
+                         .ToListAsync(ct))
+                materialKeys.Add($"{l.CourseId}|{l.Module}|{l.Title}");
 
         var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -94,6 +113,34 @@ public class MigrationEngine
 
                     if (err == null && instructor != null && !userByEmail.ContainsKey(instructor))
                         note = $"Instructor '{instructor}' was not found — the course will be left with no trainer assigned.";
+                    break;
+                }
+
+                case MigrationEntity.CourseMaterial:
+                {
+                    var cExt = V("CourseExternalId"); var cCode = V("CourseCode");
+                    var title = V("Title"); var file = V("FilePath"); var url = V("Url");
+                    int? cid = cExt != null && courseByExt.TryGetValue(cExt, out var mx) ? mx
+                             : cCode != null && courseByCode.TryGetValue(cCode, out var my) ? my : (int?)null;
+
+                    if (string.IsNullOrWhiteSpace(title)) err = "Material title is required.";
+                    else if (cExt == null && cCode == null) err = "No course identifier supplied (source ID or code).";
+                    else if (cid == null) err = $"Course '{cExt ?? cCode}' does not exist — import courses first.";
+                    else if (file == null && url == null) err = "Neither a file path in the archive nor a URL was supplied.";
+                    // A named entry that is not in the archive is the commonest material fault, so
+                    // it is caught in the dry run rather than halfway through a commit.
+                    else if (file != null && !zipEntries.Contains(file.Replace('\\', '/').TrimStart('/')))
+                        err = $"'{file}' is not in the uploaded archive.";
+                    else if (V("TranscriptPath") is { } tp && !zipEntries.Contains(tp.Replace('\\', '/').TrimStart('/')))
+                        err = $"Transcript '{tp}' is not in the uploaded archive.";
+                    // The allow-list is applied here, not only at extraction: an archive that
+                    // carries an executable should be refused while nothing has been written.
+                    else if (file != null && !UploadHelper.IsAllowedExtension(Path.GetExtension(file)))
+                        err = $"'{file}' is a {Path.GetExtension(file)} file, which is not an accepted type.";
+                    else if (!seenKeys.Add($"m:{cid}|{V("ModuleTitle") ?? "Course material"}|{title}"))
+                        err = "This row duplicates an earlier row in the same file.";
+                    else if (materialKeys.Contains($"{cid}|{V("ModuleTitle") ?? "Course material"}|{title}"))
+                        status = MigrationRowStatus.WillUpdate;
                     break;
                 }
 
@@ -164,7 +211,6 @@ public class MigrationEngine
         foreach (var row in rows)
         {
             var d = Raw(row);
-            string? V(string f) => MigrationSchema.Value(map, d, f);
             try
             {
                 switch (job.EntityType)
@@ -176,6 +222,11 @@ public class MigrationEngine
                     }
                     case MigrationEntity.Courses: {
                         var (id, isNew) = await UpsertCourseAsync(job.OrganisationId, map, d, ct);
+                        row.TargetId = id.ToString(); if (isNew) inserted++; else updated++;
+                        break;
+                    }
+                    case MigrationEntity.CourseMaterial: {
+                        var (id, isNew) = await UpsertMaterialAsync(job, map, d, ct);
                         row.TargetId = id.ToString(); if (isNew) inserted++; else updated++;
                         break;
                     }
@@ -305,6 +356,90 @@ public class MigrationEngine
 
         await _db.SaveChangesAsync(ct);
         return (course.Id, isNew);
+    }
+
+    /// <summary>Files one row of material into a course (§MIG-08).
+    ///
+    /// Lessons carry no source ID of their own, so identity here is (module, title) within the
+    /// course — re-running an import updates the material the operator already brought over
+    /// instead of stacking duplicates under the same module.
+    ///
+    /// Extraction happens at import, not later: material that arrives through migration has to be
+    /// as visible to grading and quiz generation as material a trainer uploads by hand (§AIG-14),
+    /// and asking the client to re-index every migrated document by hand is not a migration.</summary>
+    private async Task<(int Id, bool IsNew)> UpsertMaterialAsync(MigrationJob job,
+        Dictionary<string, FieldMap> map, Dictionary<string, string> d, CancellationToken ct)
+    {
+        string? V(string f) => MigrationSchema.Value(map, d, f);
+        var orgId = job.OrganisationId;
+        var cExt = V("CourseExternalId"); var cCode = V("CourseCode");
+
+        var course = await _db.Courses.IgnoreQueryFilters().FirstOrDefaultAsync(c =>
+            c.OrganisationId == orgId && (cExt != null ? c.ExternalId == cExt : c.Code == cCode), ct)
+            ?? throw new InvalidOperationException($"Course '{cExt ?? cCode}' does not exist.");
+
+        var moduleTitle = V("ModuleTitle") ?? "Course material";
+        var module = await _db.Modules.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.CourseId == course.Id && m.Title == moduleTitle, ct);
+        if (module == null)
+        {
+            var order = await _db.Modules.IgnoreQueryFilters().CountAsync(m => m.CourseId == course.Id, ct);
+            module = new Module { CourseId = course.Id, Title = moduleTitle, Order = order + 1 };
+            _db.Modules.Add(module);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        var title = V("Title")!;
+        var lesson = await _db.Lessons.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(l => l.ModuleId == module.Id && l.Title == title, ct);
+        var isNew = lesson == null;
+        if (lesson == null)
+        {
+            var order = await _db.Lessons.IgnoreQueryFilters().CountAsync(l => l.ModuleId == module.Id, ct);
+            lesson = new Lesson { ModuleId = module.Id, Title = title, Order = order + 1 };
+            _db.Lessons.Add(lesson);
+        }
+
+        var zip = job.PayloadPath;
+        var filePath = V("FilePath");
+        var url = V("Url");
+        string? abs = null;
+
+        if (filePath != null && zip != null)
+        {
+            var saved = MaterialPayload.Extract(zip, filePath, _env, "materials", out var err)
+                ?? throw new InvalidOperationException(err ?? $"'{filePath}' could not be extracted.");
+            lesson.Url = saved;
+            lesson.Type = LessonType.File;
+            abs = Path.Combine(_env.WebRootPath, saved.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        }
+        else if (url != null)
+        {
+            lesson.Url = url;
+            lesson.Type = LessonType.Video;
+        }
+
+        if (int.TryParse(V("DurationMinutes"), out var mins) && mins > 0) lesson.DurationMinutes = mins;
+
+        // A video's text comes from its transcript; a document's from the document itself. Either
+        // way the lesson ends up with text the AI can cite, or with none and a trainer prompt.
+        var transcript = V("TranscriptPath");
+        if (transcript != null && zip != null)
+        {
+            var saved = MaterialPayload.Extract(zip, transcript, _env, "transcripts", out var terr)
+                ?? throw new InvalidOperationException(terr ?? $"Transcript '{transcript}' could not be extracted.");
+            var tabs = Path.Combine(_env.WebRootPath, saved.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            var text = MaterialTextExtractor.Extract(tabs);
+            if (!string.IsNullOrWhiteSpace(text)) lesson.ExtractedText = text;
+        }
+        else if (abs != null && MaterialTextExtractor.CanExtract(abs))
+        {
+            var text = MaterialTextExtractor.Extract(abs);
+            if (!string.IsNullOrWhiteSpace(text)) lesson.ExtractedText = text;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return (lesson.Id, isNew);
     }
 
     private async Task<(int Id, bool IsNew)> UpsertEnrolmentAsync(int orgId,

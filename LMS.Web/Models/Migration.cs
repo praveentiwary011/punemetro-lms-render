@@ -3,7 +3,7 @@ namespace LMS.Web.Models;
 /// <summary>What a migration job is importing. The order of the values is the dependency
 /// order enforced by the wizard (§MIG-07) — you cannot import enrolments before the users
 /// and courses they reference exist.</summary>
-public enum MigrationEntity { Users = 0, Courses = 1, Enrolments = 2 }
+public enum MigrationEntity { Users = 0, Courses = 1, Enrolments = 2, CourseMaterial = 3 }
 
 /// <summary>Where the client's extract came from. Selects the starting column map; it does
 /// not change the import path, so there is one validated route rather than several.</summary>
@@ -25,6 +25,10 @@ public class MigrationJob
     public MigrationSource SourceSystem { get; set; }
     public string FileName { get; set; } = "";
     public int RowCount { get; set; }
+    /// <summary>Material migrations (§MIG-08) carry a ZIP alongside the extract; this is its
+    /// path under App_Data, deliberately outside the web root so an uploaded archive is never
+    /// directly reachable over HTTP.</summary>
+    public string? PayloadPath { get; set; }
     public MigrationStatus Status { get; set; }
     public int Inserted { get; set; }
     public int Updated { get; set; }

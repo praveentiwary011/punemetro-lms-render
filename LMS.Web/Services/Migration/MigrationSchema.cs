@@ -45,6 +45,17 @@ public static class MigrationSchema
             new MigrationField("Category", "Category", false, "Created on demand if unknown."),
             new MigrationField("InstructorEmail", "Instructor email", false, "Resolved against already-migrated users."),
         },
+        MigrationEntity.CourseMaterial => new[]
+        {
+            new MigrationField("CourseExternalId", "Course source ID", false, "Either this or the course code identifies the owning course."),
+            new MigrationField("CourseCode", "Course code", false, "Either this or the course source ID."),
+            new MigrationField("ModuleTitle", "Module", false, "The module to file it under; created if it does not exist. Defaults to 'Course material'."),
+            new MigrationField("Title", "Material title", true, "What the learner sees in the course."),
+            new MigrationField("FilePath", "File path in the ZIP", false, "Path of the entry inside the archive you upload alongside, e.g. manuals/signalling.pdf."),
+            new MigrationField("Url", "Video / link URL", false, "For a video or external link instead of a file."),
+            new MigrationField("TranscriptPath", "Transcript path in the ZIP", false, "Caption or transcript file for a video (.vtt/.srt/.txt), so the AI can reference what is said (§AIG-14)."),
+            new MigrationField("DurationMinutes", "Duration (minutes)", false, "Defaults to 10."),
+        },
         _ => new[]
         {
             new MigrationField("UserExternalId", "Learner source ID", false, "Either this or the learner's email is required."),
@@ -88,6 +99,11 @@ public static class MigrationSchema
             ["Status"] = new[] { "status", "completionstatus", "state", "progress" },
             ["CompletedAt"] = new[] { "completedat", "completed", "completiondate", "datecompleted", "enddate" },
             ["FinalGrade"] = new[] { "finalgrade", "grade", "score", "result", "mark" },
+            ["ModuleTitle"] = new[] { "module", "moduletitle", "section", "unit", "chapter" },
+            ["FilePath"] = new[] { "filepath", "file", "path", "filename", "attachment", "document" },
+            ["Url"] = new[] { "url", "link", "videourl", "weblink" },
+            ["TranscriptPath"] = new[] { "transcriptpath", "transcript", "captions", "vtt", "subtitles" },
+            ["DurationMinutes"] = new[] { "durationminutes", "duration", "minutes", "length" },
         };
 
         foreach (var f in Fields(entity))
