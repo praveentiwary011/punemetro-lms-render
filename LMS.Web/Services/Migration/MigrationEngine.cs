@@ -112,7 +112,8 @@ public class MigrationEngine
                     else if (courseByCode.ContainsKey(code)) status = MigrationRowStatus.WillUpdate;
 
                     if (err == null && instructor != null && !userByEmail.ContainsKey(instructor))
-                        note = $"Instructor '{instructor}' was not found — the course will be left with no trainer assigned.";
+                        note = $"Instructor '{instructor}' was not found — the course will be assigned to "
+                             + "the tenant's first trainer and can be reassigned after import.";
                     break;
                 }
 
@@ -251,7 +252,24 @@ public class MigrationEngine
         job.Inserted = inserted; job.Updated = updated; job.Failed = failed;
         job.Status = MigrationStatus.Committed;
         job.CommittedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            // Anything the database rejects at the final flush belongs to the operator's report,
+            // not to an error page: the job is marked failed and says why, and because the flush
+            // is one transaction nothing partial is left behind.
+            _db.ChangeTracker.Clear();
+            job = await _db.MigrationJobs.FirstAsync(j => j.Id == jobId, ct);
+            job.Status = MigrationStatus.Failed;
+            job.Inserted = job.Updated = 0; job.Failed = rows.Count;
+            await _db.SaveChangesAsync(ct);
+            throw new InvalidOperationException(
+                "The database rejected this migration and nothing was written: "
+                + (ex.InnerException?.Message ?? ex.Message), ex);
+        }
         return job;
     }
 
@@ -311,6 +329,28 @@ public class MigrationEngine
         course ??= await _db.Courses.IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.OrganisationId == orgId && c.Code == code, ct);
 
+        // The category and the trainer are resolved *before* the course is attached to the
+        // context. Creating a category saves, and a save flushes everything pending — so a course
+        // added first would be written half-built, with no trainer, and rejected by the foreign
+        // key. Resolve first, attach once, save once.
+        int? categoryId = null;
+        var cat = V("Category");
+        if (cat != null)
+        {
+            var category = await _db.Categories.FirstOrDefaultAsync(c => c.Name == cat, ct);
+            if (category == null) { category = new Category { Name = cat }; _db.Categories.Add(category); await _db.SaveChangesAsync(ct); }
+            categoryId = category.Id;
+        }
+
+        string? instructorId = null;
+        var instructor = V("InstructorEmail");
+        if (instructor != null)
+        {
+            var t = await _db.Users.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.OrganisationId == orgId && u.Email == instructor, ct);
+            instructorId = t?.Id;
+        }
+
         var isNew = course == null;
         if (course == null)
         {
@@ -328,27 +368,22 @@ public class MigrationEngine
         course.Title = V("Title") ?? course.Title;
         course.Description = V("Description") ?? course.Description;
         course.Code = code;
+        if (categoryId != null) course.CategoryId = categoryId;
+        if (instructorId != null) course.InstructorId = instructorId;
 
-        var cat = V("Category");
-        if (cat != null)
-        {
-            var category = await _db.Categories.FirstOrDefaultAsync(c => c.Name == cat, ct);
-            if (category == null) { category = new Category { Name = cat }; _db.Categories.Add(category); await _db.SaveChangesAsync(ct); }
-            course.CategoryId = category.Id;
-        }
-
-        var instructor = V("InstructorEmail");
-        if (instructor != null)
-        {
-            var t = await _db.Users.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(u => u.OrganisationId == orgId && u.Email == instructor, ct);
-            if (t != null) course.InstructorId = t.Id;
-        }
         if (string.IsNullOrEmpty(course.InstructorId))
         {
-            // Course.InstructorId is required; fall back to the tenant's first trainer so the
-            // row imports rather than failing on a detail the client can correct later.
+            // Course.InstructorId is required; fall back to a trainer so the row imports rather
+            // than failing on a detail the client can correct later. A trainer specifically — the
+            // first user of the tenant may well be a learner, and putting a learner's name on a
+            // course as its trainer is a wrong answer that looks like a right one.
             var fallback = await _db.Users.IgnoreQueryFilters()
+                .Where(u => u.OrganisationId == orgId
+                            && _db.UserRoles.Any(ur => ur.UserId == u.Id
+                                 && _db.Roles.Any(r => r.Id == ur.RoleId
+                                      && (r.Name == "Instructor" || r.Name == "Principal" || r.Name == "Admin"))))
+                .OrderBy(u => u.Id).FirstOrDefaultAsync(ct)
+                ?? await _db.Users.IgnoreQueryFilters()
                 .Where(u => u.OrganisationId == orgId).OrderBy(u => u.Id).FirstOrDefaultAsync(ct);
             course.InstructorId = fallback?.Id ?? throw new InvalidOperationException(
                 "This organisation has no users yet — import users before courses.");

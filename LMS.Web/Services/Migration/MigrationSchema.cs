@@ -80,13 +80,13 @@ public static class MigrationSchema
 
         var hints = new Dictionary<string, string[]>
         {
-            ["ExternalId"] = new[] { "externalid", "sourceid", "id", "userid", "courseid", "employeeid", "payrollno", "staffno" },
+            ["ExternalId"] = new[] { "externalid", "sourceid", "employeeid", "employeeno", "empid", "empno", "staffid", "staffno", "payrollno", "userid", "courseid", "id" },
             ["Email"] = new[] { "email", "emailaddress", "mail", "learneremail", "useremail" },
             ["FullName"] = new[] { "fullname", "name", "learnername", "username", "displayname", "employeename" },
             ["Department"] = new[] { "department", "dept", "division", "function", "team" },
             ["Role"] = new[] { "role", "usertype", "profile", "position", "jobrole" },
             ["IsActive"] = new[] { "isactive", "active", "status", "enabled" },
-            ["Code"] = new[] { "code", "coursecode", "shortname", "itemid", "coursenumber" },
+            ["Code"] = new[] { "coursecode", "coursenumber", "code", "shortname", "itemid" },
             ["Title"] = new[] { "title", "coursename", "name", "fullname", "itemtitle" },
             ["Description"] = new[] { "description", "summary", "details", "about" },
             ["Category"] = new[] { "category", "topic", "subject", "curriculum" },
@@ -109,10 +109,22 @@ public static class MigrationSchema
         foreach (var f in Fields(entity))
         {
             var want = hints.TryGetValue(f.Name, out var h) ? h : new[] { Norm(f.Name) };
-            // Exact normalised match first, then a contains match — in hint order, so the most
-            // specific alias wins over a generic one ("learneremail" before "email").
-            var col = cols.FirstOrDefault(c => want.Contains(Norm(c)))
-                   ?? cols.FirstOrDefault(c => want.Any(w => Norm(c).Contains(w)));
+            // Walk the hints in order and take the first column that matches one, rather than
+            // walking the columns: the hint list is ordered by specificity, so *Course Code*
+            // beats *Item ID* for the course code even when Item ID appears first in the file.
+            // Exact matches are exhausted before any contains match, so a column that names a
+            // field outright is never lost to another that merely contains its alias.
+            string? col = null;
+            foreach (var w in want)
+            {
+                col = cols.FirstOrDefault(c => Norm(c) == w);
+                if (col != null) break;
+            }
+            foreach (var w in want)
+            {
+                if (col != null) break;
+                col = cols.FirstOrDefault(c => Norm(c).Contains(w));
+            }
             if (col != null) map[f.Name] = new FieldMap { Column = col };
         }
         return map;

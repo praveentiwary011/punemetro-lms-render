@@ -205,7 +205,22 @@ public class MigrationController : Controller
         if (job.Status == MigrationStatus.Committed)
         { TempData["Err"] = "This job has already been committed. Upload the corrected extract as a new job."; return RedirectToAction("Review", new { id }); }
 
-        var done = await _engine.CommitAsync(id);
+        MigrationJob done;
+        try
+        {
+            done = await _engine.CommitAsync(id);
+        }
+        catch (Exception ex)
+        {
+            // An operator mid-migration needs to be told what the database refused and that
+            // nothing was written — not handed a stack trace.
+            Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "", "MigrationCommitFailed",
+                $"{job.Organisation?.Name} · {job.EntityType} · {ex.Message}");
+            await _db.SaveChangesAsync();
+            TempData["Err"] = ex.Message;
+            return RedirectToAction("Review", new { id });
+        }
+
         Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "", "MigrationCommit",
             $"{job.Organisation?.Name} · {job.EntityType} · inserted {done.Inserted}, updated {done.Updated}, failed {done.Failed}");
         await _db.SaveChangesAsync();
