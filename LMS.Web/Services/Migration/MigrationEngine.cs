@@ -439,6 +439,7 @@ public class MigrationEngine
         var filePath = V("FilePath");
         var url = V("Url");
         string? abs = null;
+        var previousUrl = lesson.Url;
 
         if (filePath != null && zip != null)
         {
@@ -461,11 +462,20 @@ public class MigrationEngine
         var transcript = V("TranscriptPath");
         if (transcript != null && zip != null)
         {
-            var saved = MaterialPayload.Extract(zip, transcript, _env, "transcripts", out var terr)
+            // Only the transcript's text is kept, so it is read from a temporary copy that goes
+            // away immediately rather than from a file left sitting in the uploads folder.
+            var tmp = MaterialPayload.ExtractToTemp(zip, transcript, out var terr)
                 ?? throw new InvalidOperationException(terr ?? $"Transcript '{transcript}' could not be extracted.");
-            var tabs = Path.Combine(_env.WebRootPath, saved.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-            var text = MaterialTextExtractor.Extract(tabs);
-            if (!string.IsNullOrWhiteSpace(text)) lesson.ExtractedText = text;
+            try
+            {
+                var text = MaterialTextExtractor.Extract(tmp);
+                if (!string.IsNullOrWhiteSpace(text)) lesson.ExtractedText = text;
+            }
+            finally
+            {
+                // A temporary file we cannot remove is not worth failing an import over.
+                try { File.Delete(tmp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
         }
         else if (abs != null && MaterialTextExtractor.CanExtract(abs))
         {
@@ -474,7 +484,31 @@ public class MigrationEngine
         }
 
         await _db.SaveChangesAsync(ct);
+
+        // A re-run writes a fresh copy of the file, which is what lets a corrected document
+        // replace the old one. The copy it supersedes is now referenced by nothing, so it is
+        // removed here — otherwise every re-import of a catalogue leaves a second set behind.
+        if (previousUrl != null && previousUrl != lesson.Url)
+            await DeleteSupersededAsync(previousUrl, ct);
+
         return (lesson.Id, isNew);
+    }
+
+    /// <summary>Removes a stored upload that a migration has just replaced. Deletes only inside
+    /// wwwroot/uploads and only when no lesson still points at it — a file this migration did not
+    /// put there, or that something else is using, is left alone.</summary>
+    private async Task DeleteSupersededAsync(string url, CancellationToken ct)
+    {
+        if (!url.StartsWith("/uploads/", StringComparison.Ordinal)) return;   // an external URL
+        if (await _db.Lessons.IgnoreQueryFilters().AnyAsync(l => l.Url == url, ct)) return;
+
+        var uploads = Path.GetFullPath(Path.Combine(_env.WebRootPath, "uploads")) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(Path.Combine(_env.WebRootPath,
+            url.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
+        if (!full.StartsWith(uploads, StringComparison.Ordinal)) return;      // never outside uploads
+
+        try { if (File.Exists(full)) File.Delete(full); }
+        catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     private async Task<(int Id, bool IsNew)> UpsertEnrolmentAsync(int orgId,

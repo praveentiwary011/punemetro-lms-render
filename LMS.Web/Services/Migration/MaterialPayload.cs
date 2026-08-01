@@ -50,6 +50,22 @@ public static class MaterialPayload
         return set;
     }
 
+    /// <summary>Locates one entry and checks it is something we are willing to write out.</summary>
+    private static ZipArchiveEntry? Find(ZipArchive zip, string entryPath, out string? error)
+    {
+        error = null;
+        var wanted = entryPath.Replace('\\', '/').TrimStart('/');
+        var entry = zip.Entries.FirstOrDefault(e =>
+            string.Equals(e.FullName.Replace('\\', '/'), wanted, StringComparison.OrdinalIgnoreCase));
+        if (entry == null) { error = $"'{entryPath}' is not in the uploaded archive."; return null; }
+        if (entry.Length > MaxSingleEntry) { error = $"'{entryPath}' exceeds the 200 MB per-file limit."; return null; }
+
+        var ext = Path.GetExtension(entry.Name);
+        if (!UploadHelper.IsAllowedExtension(ext))
+        { error = $"'{entryPath}' is a {ext} file, which is not an accepted type."; return null; }
+        return entry;
+    }
+
     /// <summary>Copies one named entry into wwwroot/uploads/<paramref name="subfolder"/> under a
     /// generated name, and returns its web path. Returns null when the entry is absent, oversized,
     /// or of a type the LMS does not accept.
@@ -65,19 +81,12 @@ public static class MaterialPayload
         if (!File.Exists(zipPath)) { error = "The archive for this job is no longer on the server."; return null; }
 
         using var zip = ZipFile.OpenRead(zipPath);
-        var wanted = entryPath.Replace('\\', '/').TrimStart('/');
-        var entry = zip.Entries.FirstOrDefault(e =>
-            string.Equals(e.FullName.Replace('\\', '/'), wanted, StringComparison.OrdinalIgnoreCase));
-        if (entry == null) { error = $"'{entryPath}' is not in the uploaded archive."; return null; }
-        if (entry.Length > MaxSingleEntry) { error = $"'{entryPath}' exceeds the 200 MB per-file limit."; return null; }
-
-        var ext = Path.GetExtension(entry.Name);
-        if (!UploadHelper.IsAllowedExtension(ext))
-        { error = $"'{entryPath}' is a {ext} file, which is not an accepted type."; return null; }
+        var entry = Find(zip, entryPath, out error);
+        if (entry == null) return null;
 
         var dir = Path.Combine(env.WebRootPath, "uploads", subfolder);
         Directory.CreateDirectory(dir);
-        var name = $"{Guid.NewGuid():N}{ext}";
+        var name = $"{Guid.NewGuid():N}{Path.GetExtension(entry.Name)}";
         var dest = Path.Combine(dir, name);
 
         using (var src = entry.Open())
@@ -85,5 +94,28 @@ public static class MaterialPayload
             src.CopyTo(fs);
 
         return $"/uploads/{subfolder}/{name}";
+    }
+
+    /// <summary>Copies one named entry to a temporary file and returns its path, for content whose
+    /// *text* is what the LMS keeps. A video transcript is read once into the lesson and never
+    /// served again, so writing it into the web root would leave a file referenced by nothing —
+    /// an orphan on the first import, and another on every re-run. The caller deletes it.</summary>
+    public static string? ExtractToTemp(string zipPath, string entryPath, out string? error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(entryPath)) { error = "No path given."; return null; }
+        if (!File.Exists(zipPath)) { error = "The archive for this job is no longer on the server."; return null; }
+
+        using var zip = ZipFile.OpenRead(zipPath);
+        var entry = Find(zip, entryPath, out error);
+        if (entry == null) return null;
+
+        // The extension is kept because the text extractor chooses its reader from it.
+        var dest = Path.Combine(Path.GetTempPath(), $"lms-mig-{Guid.NewGuid():N}{Path.GetExtension(entry.Name)}");
+        using (var src = entry.Open())
+        using (var fs = File.Create(dest))
+            src.CopyTo(fs);
+
+        return dest;
     }
 }
