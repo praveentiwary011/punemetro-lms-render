@@ -31,6 +31,44 @@ public static class SchemaUpgrader
         Run(db, log, $"ALTER TABLE QuizAnswers ADD GradingPending {intc} NOT NULL DEFAULT 0");
         Run(db, log, $"ALTER TABLE Quizzes ADD GeneratedByAi {intc} NOT NULL DEFAULT 0");
         Run(db, log, $"ALTER TABLE Lessons ADD ExtractedText {txt} NULL");
+        // Data migration (§MIG) — additive, so an existing customer database gains these
+        // without a reseed and keeps its data.
+        Run(db, log, $"ALTER TABLE AspNetUsers ADD ExternalId {txt} NULL");
+        Run(db, log, $"ALTER TABLE Courses ADD ExternalId {txt} NULL");
+        Run(db, log, $"ALTER TABLE Enrollments ADD ExternalId {txt} NULL");
+
+        Run(db, log, $@"CREATE TABLE IF NOT EXISTS MigrationJobs (
+            Id {pk},
+            OrganisationId {intc} NOT NULL,
+            EntityType {intc} NOT NULL,
+            SourceSystem {intc} NOT NULL,
+            FileName {txt} NOT NULL,
+            RowCount {intc} NOT NULL,
+            Status {intc} NOT NULL,
+            Inserted {intc} NOT NULL,
+            Updated {intc} NOT NULL,
+            Skipped {intc} NOT NULL,
+            Failed {intc} NOT NULL,
+            CreatedById {txt} NOT NULL,
+            CreatedAt {dt} NOT NULL,
+            ValidatedAt {dt} NULL,
+            CommittedAt {dt} NULL)", ifNotExistsHandled: sqlite);
+
+        Run(db, log, $@"CREATE TABLE IF NOT EXISTS MigrationMappings (
+            Id {pk},
+            OrganisationId {intc} NOT NULL,
+            EntityType {intc} NOT NULL,
+            MapJson {txt} NOT NULL,
+            UpdatedAt {dt} NOT NULL)", ifNotExistsHandled: sqlite);
+
+        Run(db, log, $@"CREATE TABLE IF NOT EXISTS MigrationRows (
+            Id {pk},
+            MigrationJobId {intc} NOT NULL,
+            RowNumber {intc} NOT NULL,
+            RawJson {txt} NOT NULL,
+            Status {intc} NOT NULL,
+            Message {txt} NULL,
+            TargetId {txt} NULL)", ifNotExistsHandled: sqlite);
 
         Run(db, log, $@"CREATE TABLE IF NOT EXISTS SsoConfigurations (
             Id {pk},
@@ -130,6 +168,10 @@ public static class SchemaUpgrader
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_KnowledgeChunks_Org_Course ON KnowledgeChunks (OrganisationId, CourseId)", ifNotExistsHandled: true);
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_CourseEditRequests_Course_Trainer_Status ON CourseEditRequests (CourseId, TrainerId, Status)", ifNotExistsHandled: true);
         Run(db, log, "CREATE UNIQUE INDEX IF NOT EXISTS IX_OrganisationMailSettings_Org ON OrganisationMailSettings (OrganisationId)", ifNotExistsHandled: true);
+        Run(db, log, "CREATE UNIQUE INDEX IF NOT EXISTS IX_MigrationMappings_Org_Entity ON MigrationMappings (OrganisationId, EntityType)", ifNotExistsHandled: true);
+        Run(db, log, "CREATE INDEX IF NOT EXISTS IX_MigrationRows_Job ON MigrationRows (MigrationJobId)", ifNotExistsHandled: true);
+        Run(db, log, "CREATE UNIQUE INDEX IF NOT EXISTS IX_Users_Org_ExternalId ON AspNetUsers (OrganisationId, ExternalId) WHERE ExternalId IS NOT NULL", ifNotExistsHandled: true);
+        Run(db, log, "CREATE UNIQUE INDEX IF NOT EXISTS IX_Courses_Org_ExternalId ON Courses (OrganisationId, ExternalId) WHERE ExternalId IS NOT NULL", ifNotExistsHandled: true);
         Run(db, log, "CREATE UNIQUE INDEX IF NOT EXISTS IX_EmailOutbox_DedupeKey ON EmailOutbox (DedupeKey)", ifNotExistsHandled: true);
         Run(db, log, "CREATE INDEX IF NOT EXISTS IX_EmailOutbox_Sent_Created ON EmailOutbox (SentAt, CreatedAt)", ifNotExistsHandled: true);
     }

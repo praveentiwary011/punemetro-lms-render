@@ -1,0 +1,73 @@
+@model MigrationJob
+@{
+    ViewData["Title"] = "Dry run";
+    var rows = (List<MigrationRow>)ViewBag.Rows;
+    var committed = Model.Status == MigrationStatus.Committed;
+}
+<nav class="small mb-2"><a asp-action="Index" class="text-decoration-none">Data migration</a><span class="text-muted"> / @(committed ? "Result" : "Dry run")</span></nav>
+<h2 class="mb-1"><i class="bi bi-clipboard-check me-2"></i>@(committed ? "Migration result" : "Dry run") — @Model.EntityType</h2>
+<p class="text-muted">@Model.Organisation?.Name · @Model.FileName · @Model.RowCount rows</p>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="card p-3"><div class="h4 mb-0 text-success">@Model.Inserted</div><div class="small text-muted">@(committed ? "inserted" : "will insert")</div></div></div>
+    <div class="col-6 col-md-3"><div class="card p-3"><div class="h4 mb-0 text-primary">@Model.Updated</div><div class="small text-muted">@(committed ? "updated" : "will update")</div></div></div>
+    <div class="col-6 col-md-3"><div class="card p-3"><div class="h4 mb-0 text-secondary">@Model.Skipped</div><div class="small text-muted">skipped</div></div></div>
+    <div class="col-6 col-md-3"><div class="card p-3"><div class="h4 mb-0 @(Model.Failed > 0 ? "text-danger" : "text-muted")">@Model.Failed</div><div class="small text-muted">failed</div></div></div>
+</div>
+
+<div class="d-flex gap-2 mb-3 flex-wrap">
+    @if (!committed)
+    {
+        <form method="post" asp-action="Commit" asp-route-id="@Model.Id" class="m-0">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-primary" data-confirm="Apply this migration to @Model.Organisation?.Name? Rows that failed validation are not applied.">
+                <i class="bi bi-database-check me-1"></i><span>Commit @(Model.Inserted + Model.Updated) row(s)</span>
+            </button>
+        </form>
+        <form method="post" asp-action="Revalidate" asp-route-id="@Model.Id" class="m-0">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-outline-secondary">Re-validate</button>
+        </form>
+        <a class="btn btn-outline-secondary" asp-action="Map" asp-route-id="@Model.Id">Change mapping</a>
+    }
+    <a class="btn btn-outline-primary" asp-action="Report" asp-route-id="@Model.Id"><i class="bi bi-download me-1"></i><span>Download report</span></a>
+</div>
+
+@if (Model.Failed > 0 && !committed)
+{
+    <div class="alert alert-warning py-2 small">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        @Model.Failed row(s) will not be imported. Send the report to the client, correct the source
+        and upload it again — re-running is safe, records already migrated are updated, not duplicated.
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+        <thead><tr><th style="width:6rem">Row</th><th style="width:9rem">Outcome</th><th>Detail</th></tr></thead>
+        <tbody>
+        @foreach (var r in rows)
+        {
+            <tr>
+                <td class="small text-muted">@r.RowNumber</td>
+                <td>
+                    @switch (r.Status)
+                    {
+                        case MigrationRowStatus.Error:
+                            <span class="badge text-bg-danger-subtle text-danger-emphasis border">Failed</span>; break;
+                        case MigrationRowStatus.WillInsert:
+                            <span class="badge text-bg-success-subtle text-success-emphasis border">Insert</span>; break;
+                        case MigrationRowStatus.WillUpdate:
+                            <span class="badge text-bg-primary-subtle text-primary-emphasis border">Update</span>; break;
+                        default:
+                            <span class="badge text-bg-secondary-subtle text-secondary-emphasis border">@(committed ? "Applied" : "Skipped")</span>; break;
+                    }
+                </td>
+                <td class="small">@r.Message</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    </div>
+</div>

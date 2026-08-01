@@ -67,6 +67,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SsoConfiguration> SsoConfigurations => Set<SsoConfiguration>();
     public DbSet<CourseEditRequest> CourseEditRequests => Set<CourseEditRequest>();
     public DbSet<OrganisationMailSetting> OrganisationMailSettings => Set<OrganisationMailSetting>();
+    public DbSet<MigrationJob> MigrationJobs => Set<MigrationJob>();
+    public DbSet<MigrationMapping> MigrationMappings => Set<MigrationMapping>();
+    public DbSet<MigrationRow> MigrationRows => Set<MigrationRow>();
     public DbSet<EmailOutbox> EmailOutbox => Set<EmailOutbox>();
     public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
     public DbSet<SubjectiveGradeResult> SubjectiveGradeResults => Set<SubjectiveGradeResult>();
@@ -175,6 +178,29 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(s => s.OrganisationId).OnDelete(DeleteBehavior.Cascade);
         builder.Entity<SsoConfiguration>()
             .HasIndex(s => s.OrganisationId).IsUnique();
+
+        // ---- Data migration (§MIG) ----
+        builder.Entity<MigrationJob>()
+            .HasOne(j => j.Organisation).WithMany()
+            .HasForeignKey(j => j.OrganisationId).OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<MigrationJob>()
+            .HasOne(j => j.CreatedBy).WithMany()
+            .HasForeignKey(j => j.CreatedById).OnDelete(DeleteBehavior.Restrict);
+        builder.Entity<MigrationRow>()
+            .HasOne(r => r.MigrationJob).WithMany()
+            .HasForeignKey(r => r.MigrationJobId).OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<MigrationMapping>()
+            .HasIndex(m => new { m.OrganisationId, m.EntityType }).IsUnique();
+
+        // The migration key: unique per tenant so one client's identifiers can never
+        // collide with another's, and re-running an extract updates rather than duplicates.
+        builder.Entity<ApplicationUser>()
+            .HasIndex(u => new { u.OrganisationId, u.ExternalId }).IsUnique()
+            .HasFilter(null);
+        builder.Entity<Course>()
+            .HasIndex(c => new { c.OrganisationId, c.ExternalId }).IsUnique()
+            .HasFilter(null);
+        builder.Entity<Enrollment>().HasIndex(e => e.ExternalId);
 
         // ---- Per-tenant email configuration (§NTF-04) ----
         builder.Entity<OrganisationMailSetting>()

@@ -107,6 +107,7 @@ builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 // database and applied without a redeploy. The scheme is always registered; the sign-in
 // page only offers it once an administrator has enabled a configuration.
 builder.Services.AddScoped<LMS.Web.Services.Sso.SsoService>();
+builder.Services.AddScoped<LMS.Web.Services.Migration.MigrationEngine>();
 builder.Services.AddSingleton<LMS.Web.Services.Sso.SsoOptionsCache>();
 // NOTE: must be registered as IConfigureOptions<> — the options factory resolves that
 // interface, not IConfigureNamedOptions<>, even though our class implements the named one.

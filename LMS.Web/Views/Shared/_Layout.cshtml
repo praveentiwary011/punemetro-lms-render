@@ -186,6 +186,10 @@
                                     @if (User.IsInRole("SuperUser"))
                                     {
                                         <li class="nk-menu-item @Active("Admin", "MailSettings")"><a asp-controller="Admin" asp-action="MailSettings" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-mail-fill"></em></span><span class="nk-menu-text">Email Notifications</span></a></li>
+                                @if (User.IsInRole("SuperUser"))
+                                {
+                                    <li class="nk-menu-item @Active("Migration")"><a asp-controller="Migration" asp-action="Index" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-swap"></em></span><span class="nk-menu-text">Data Migration</span></a></li>
+                                }
                                     }
                                     <li class="nk-menu-item @Active("Admin", "LearningRecords")"><a asp-controller="Admin" asp-action="LearningRecords" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-db-fill"></em></span><span class="nk-menu-text">Learning Records (xAPI)</span></a></li>
                                     <li class="nk-menu-item @Active("Admin", "AuditLog")"><a asp-controller="Admin" asp-action="AuditLog" class="nk-menu-link"><span class="nk-menu-icon"><em class="icon ni ni-list-check"></em></span><span class="nk-menu-text">Audit Log</span></a></li>

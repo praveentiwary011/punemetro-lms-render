@@ -1,0 +1,99 @@
+@model object
+@{
+    ViewData["Title"] = "Data migration";
+    var orgs = (List<Organisation>)ViewBag.Organisations;
+    var jobs = (List<MigrationJob>)ViewBag.Jobs;
+    var counts = (Dictionary<int,(int Users,int Courses)>)ViewBag.Counts;
+}
+<div class="mb-4">
+    <h2 class="mb-1"><i class="bi bi-arrow-left-right me-2"></i>Data migration</h2>
+    <p class="text-muted mb-0">Bring a client's existing LMS data into a tenant. Nothing is written until you have seen the dry run.</p>
+</div>
+
+<div class="alert alert-info py-2 small">
+    <i class="bi bi-info-circle me-1"></i>
+    Import in dependency order — <strong>users → courses → enrolments</strong>. A row referencing a
+    learner or course that does not exist yet fails validation and names the missing key, rather than
+    creating a placeholder nobody notices.
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-upload me-2"></i>New migration</div>
+    <div class="card-body">
+        <form method="post" asp-action="Upload" enctype="multipart/form-data" class="row g-3">
+            @Html.AntiForgeryToken()
+            <div class="col-md-4">
+                <label class="form-label">Target organisation</label>
+                <select name="organisationId" class="form-select" required>
+                    <option value="">Choose the tenant…</option>
+                    @foreach (var o in orgs)
+                    {
+                        var c = counts.TryGetValue(o.Id, out var v) ? v : (0, 0);
+                        <option value="@o.Id">@o.Name — @c.Item1 users, @c.Item2 courses</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">What are you importing?</label>
+                <select name="entityType" class="form-select">
+                    <option value="0">Users</option>
+                    <option value="1">Courses</option>
+                    <option value="2">Enrolments &amp; completions</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Source system</label>
+                <select name="sourceSystem" class="form-select">
+                    <option value="0">Generic CSV</option>
+                    <option value="1">Excel</option>
+                    <option value="2">Moodle</option>
+                    <option value="3">SAP SuccessFactors</option>
+                    <option value="4">Cornerstone</option>
+                    <option value="5">Other</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Extract</label>
+                <input type="file" name="file" class="form-control" accept=".csv,.tsv,.xlsx" required />
+            </div>
+            <div class="col-12"><button class="btn btn-primary"><i class="bi bi-upload me-1"></i><span>Upload and map</span></button></div>
+        </form>
+    </div>
+</div>
+
+<h5 class="mb-2">Recent jobs</h5>
+<div class="card">
+    @if (!jobs.Any())
+    {
+        <div class="p-4 text-muted">No migrations run yet.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Tenant</th><th>Entity</th><th>File</th><th>Rows</th><th>Outcome</th><th>Status</th><th>By</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var j in jobs)
+            {
+                <tr>
+                    <td>@j.Organisation?.Name</td>
+                    <td>@j.EntityType</td>
+                    <td class="small">@j.FileName</td>
+                    <td>@j.RowCount</td>
+                    <td class="small">
+                        @if (j.Status == MigrationStatus.Committed)
+                        { <text>@j.Inserted inserted · @j.Updated updated@(j.Failed > 0 ? $" · {j.Failed} failed" : "")</text> }
+                        else if (j.Status == MigrationStatus.Validated)
+                        { <text>@j.Inserted will insert · @j.Updated will update@(j.Failed > 0 ? $" · {j.Failed} failed" : "")</text> }
+                        else { <text>—</text> }
+                    </td>
+                    <td><span class="badge text-bg-@(j.Status == MigrationStatus.Committed ? "success" : j.Status == MigrationStatus.Failed ? "danger" : "secondary")-subtle border">@j.Status</span></td>
+                    <td class="small">@j.CreatedBy?.FullName</td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-action="Review" asp-route-id="@j.Id"><i class="bi bi-eye me-1"></i><span>Open</span></a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    }
+</div>

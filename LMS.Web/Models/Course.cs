@@ -14,6 +14,14 @@ public enum CourseKind { Technical = 0, Leadership = 1, Compliance = 2, Onboardi
 
 public class Course
 {
+    /// <summary>The source system's own identifier, set only by data migration (§MIG-05).
+    /// It is what makes a re-run of the same extract reconcile with what it created before
+    /// rather than insert a twin, and what lets enrolment rows reference people and courses
+    /// by the client's keys instead of guessing on email or title. Null for records created
+    /// in the LMS itself. Unique per organisation.</summary>
+    [MaxLength(128)]
+    public string? ExternalId { get; set; }
+
     public int Id { get; set; }
     public CourseKind Kind { get; set; } = CourseKind.Technical;
     [Required, MaxLength(200)]
@@ -94,6 +102,14 @@ public enum EnrollmentStatus { Active = 0, Completed = 1, Dropped = 2 }
 
 public class Enrollment
 {
+    /// <summary>The source system's own identifier, set only by data migration (§MIG-05).
+    /// It is what makes a re-run of the same extract reconcile with what it created before
+    /// rather than insert a twin, and what lets enrolment rows reference people and courses
+    /// by the client's keys instead of guessing on email or title. Null for records created
+    /// in the LMS itself. Unique per organisation.</summary>
+    [MaxLength(128)]
+    public string? ExternalId { get; set; }
+
     public int Id { get; set; }
     public int CourseId { get; set; }
     public Course? Course { get; set; }

@@ -1,9 +1,18 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 
 namespace LMS.Web.Models;
 
 public class ApplicationUser : IdentityUser
 {
+    /// <summary>The source system's own identifier, set only by data migration (§MIG-05).
+    /// It is what makes a re-run of the same extract reconcile with what it created before
+    /// rather than insert a twin, and what lets enrolment rows reference people and courses
+    /// by the client's keys instead of guessing on email or title. Null for records created
+    /// in the LMS itself. Unique per organisation.</summary>
+    [MaxLength(128)]
+    public string? ExternalId { get; set; }
+
     public string FullName { get; set; } = "";
     public string Department { get; set; } = "General";
     public string? Bio { get; set; }
