@@ -16,17 +16,29 @@ public interface IEmailJob
 /// <summary>Shared helpers for the two scheduled notifiers.</summary>
 internal static class NotifierHelpers
 {
-    /// <summary>Active learners of one organisation, with an email address.
-    /// "Learner" is the Student platform role, which every organisation's Trainee
-    /// company role maps to, so custom role names are covered automatically.</summary>
-    public static async Task<List<ApplicationUser>> LearnersAsync(AppDbContext db, int orgId, CancellationToken ct)
+    /// <summary>Roles that make someone staff. Anyone holding one of these is excluded
+    /// from the new-course digest even if they also hold the learner role — trainers,
+    /// principals and administrators see the catalogue in the application and should not
+    /// be told about courses they may have authored themselves (§NTF-03.2).</summary>
+    private static readonly string[] StaffRoles = { "Admin", "Principal", "Instructor", "SuperUser" };
+
+    /// <summary>Recipients of the weekly new-course digest: active members of one
+    /// organisation who hold the Student platform role — which every organisation's
+    /// Trainee company role maps to, so custom role names are covered automatically —
+    /// and who hold NO staff role. Deliberately narrower than "everyone with the learner
+    /// role", because staff accounts are commonly given it as well.</summary>
+    public static async Task<List<ApplicationUser>> DigestRecipientsAsync(AppDbContext db, int orgId, CancellationToken ct)
     {
         var studentRoleId = await db.Roles.Where(r => r.Name == "Student").Select(r => r.Id).FirstOrDefaultAsync(ct);
         if (studentRoleId == null) return new List<ApplicationUser>();
 
+        var staffRoleIds = await db.Roles.Where(r => StaffRoles.Contains(r.Name!))
+            .Select(r => r.Id).ToListAsync(ct);
+
         return await db.Users.IgnoreQueryFilters()
             .Where(u => u.OrganisationId == orgId && u.IsActive && u.Email != null && u.Email != "")
             .Where(u => db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == studentRoleId))
+            .Where(u => !db.UserRoles.Any(ur => ur.UserId == u.Id && staffRoleIds.Contains(ur.RoleId)))
             .ToListAsync(ct);
     }
 
@@ -37,8 +49,8 @@ internal static class NotifierHelpers
 /// <summary>Weekly digest of newly published courses (§NOT-06).
 ///
 /// Runs once per ISO week per organisation, on the configured day and hour. Each
-/// active learner is sent the courses published in the last seven days that they are
-/// not already enrolled in; a learner with nothing new receives nothing, so the mail
+/// active learner — excluding staff, who see the catalogue in the application — is sent
+/// the courses published in the last seven days that they are not already enrolled in; a learner with nothing new receives nothing, so the mail
 /// only ever arrives when it has something to say. The week number is part of the
 /// dedupe key, so a restart — or a second instance — cannot send the digest twice.</summary>
 public class NewCourseDigestJob : IEmailJob
@@ -76,7 +88,7 @@ public class NewCourseDigestJob : IEmailJob
                 .OrderBy(c => c.Title).ToListAsync(ct);
             if (fresh.Count == 0) continue;
 
-            foreach (var learner in await NotifierHelpers.LearnersAsync(db, org.Id, ct))
+            foreach (var learner in await NotifierHelpers.DigestRecipientsAsync(db, org.Id, ct))
             {
                 var enrolled = await db.Enrollments.IgnoreQueryFilters()
                     .Where(e => e.StudentId == learner.Id).Select(e => e.CourseId).ToListAsync(ct);
