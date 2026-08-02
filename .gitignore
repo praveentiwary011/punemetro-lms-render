@@ -1,6 +1,9 @@
 # build output & local data — never publish these
 **/bin/
 **/obj/
+# the Data Protection key ring — it decrypts the SSO client secret and every tenant's
+# SMTP password, so it must never reach a remote
+LMS.Web/App_Data/
 *.db
 *.db-shm
 *.db-wal
