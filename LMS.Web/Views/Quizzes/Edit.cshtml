@@ -28,6 +28,15 @@
         </button>
     </form>
 </div>
+<form method="post" asp-action="ToggleShuffle" class="d-inline-block mb-2">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="id" value="@Model.Id" />
+    <button class="btn btn-sm @(Model.ShuffleQuestions ? "btn-outline-success" : "btn-outline-secondary")"
+            title="Each trainee sees the questions in a different order, and a retake differs again. Marking is unaffected — every answer is graded against its own question.">
+        <i class="bi @(Model.ShuffleQuestions ? "bi-shuffle" : "bi-list-ol") me-1"></i>
+        <span>@(Model.ShuffleQuestions ? "Question order: randomised per trainee" : "Question order: fixed")</span>
+    </button>
+</form>
 <p class="text-muted mb-3">@Model.Questions.Count question(s) · @Model.TimeLimitMinutes min · @Model.MaxAttempts attempts · pass @Model.PassingScore% · total @Model.Questions.Sum(q => q.Points).ToString("0.#") pts</p>
 @if (!Model.IsPublished)
 {

@@ -31,6 +31,8 @@ public static class SchemaUpgrader
         Run(db, log, $"ALTER TABLE QuizAnswers ADD GradingPending {intc} NOT NULL DEFAULT 0");
         Run(db, log, $"ALTER TABLE Quizzes ADD GeneratedByAi {intc} NOT NULL DEFAULT 0");
         Run(db, log, $"ALTER TABLE Lessons ADD ExtractedText {txt} NULL");
+        Run(db, log, $"ALTER TABLE Quizzes ADD ShuffleQuestions {intc} NOT NULL DEFAULT 1");
+        Run(db, log, $"ALTER TABLE QuizAttempts ADD QuestionOrder {txt} NULL");
         // Data migration (§MIG) — additive, so an existing customer database gains these
         // without a reseed and keeps its data.
         Run(db, log, $"ALTER TABLE AspNetUsers ADD ExternalId {txt} NULL");

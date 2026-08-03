@@ -90,6 +90,24 @@ public class QuizzesController : Controller
         return RedirectToAction("Edit", new { id });
     }
 
+    /// <summary>Turn per-trainee question shuffling on or off for this paper (§QUZ-11).</summary>
+    [Authorize(Roles = "Instructor,Admin,Principal")]
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleShuffle(int id)
+    {
+        var quiz = await _db.Quizzes.Include(q => q.Course).FirstOrDefaultAsync(q => q.Id == id);
+        if (quiz == null || !await OwnsCourseAsync(quiz.Course!)) return NotFound();
+
+        quiz.ShuffleQuestions = !quiz.ShuffleQuestions;
+        Notifier.Audit(_db, User.GetUserId(), User.Identity!.Name ?? "",
+            quiz.ShuffleQuestions ? "EnableQuizShuffle" : "DisableQuizShuffle", $"{quiz.Course!.Title} — {quiz.Title}");
+        await _db.SaveChangesAsync();
+        TempData["Ok"] = quiz.ShuffleQuestions
+            ? "Question order is randomised — each trainee sees this paper in a different order."
+            : "Question order is fixed — every trainee sees the questions in the order below.";
+        return RedirectToAction("Edit", new { id });
+    }
+
     /// <summary>Create a quiz whose questions the AI drafts from this course's own material,
     /// sized to the trainer's time limit (§AIG-11/12). The trainer reviews before use.</summary>
     [Authorize(Roles = "Instructor,Admin,Principal")]
@@ -355,7 +373,11 @@ public class QuizzesController : Controller
             return RedirectToAction("Details", "Courses", new { id = quiz.CourseId });
         }
 
-        ViewBag.AttemptNumber = attemptCount + 1;
+        // Each trainee sees the paper in their own order (§QUZ-11). Derived from the quiz, the
+        // trainee and the attempt number, so a refresh mid-attempt cannot reshuffle it.
+        var attemptNo = attemptCount + 1;
+        ViewBag.AttemptNumber = attemptNo;
+        ViewBag.OrderedQuestions = QuizOrdering.For(quiz.Questions, quiz, uid, attemptNo);
         return View(quiz);
     }
 
@@ -378,6 +400,11 @@ public class QuizzesController : Controller
             return RedirectToAction("MyCourses", "Courses");
         }
 
+        // A paper submitted with nothing filled in posts no answers[...] keys at all, and model
+        // binding then hands us null rather than an empty dictionary — which used to throw, so the
+        // trainee saw a 500 instead of a (zero) result. Treat it as "answered nothing".
+        answers ??= new Dictionary<int, string>();
+
         var uid = User.GetUserId();
         var attemptCount = await _db.QuizAttempts.CountAsync(a => a.QuizId == id && a.StudentId == uid && a.SubmittedAt != null);
         if (!quiz.IsSelfAssessment && attemptCount >= await AllowedAttemptsAsync(quiz, uid))
@@ -386,11 +413,16 @@ public class QuizzesController : Controller
             return RedirectToAction("MyResult", new { id });
         }
 
+        var attemptNo = attemptCount + 1;
         var attempt = new QuizAttempt
         {
             QuizId = id, StudentId = uid, SubmittedAt = DateTime.UtcNow,
-            AttemptNumber = attemptCount + 1,
-            MaxScore = quiz.Questions.Sum(q => q.Points)
+            AttemptNumber = attemptNo,
+            MaxScore = quiz.Questions.Sum(q => q.Points),
+            // The order this paper was actually sat in, so review and marking replay it (§QUZ-11).
+            // Scoring below is unaffected: it iterates the questions and looks each answer up by
+            // question id, so a response is always marked against its own question.
+            QuestionOrder = QuizOrdering.Record(QuizOrdering.For(quiz.Questions, quiz, uid, attemptNo))
         };
 
         double score = 0;
@@ -481,6 +513,8 @@ public class QuizzesController : Controller
             .Where(a => a.QuizId == id && a.StudentId == uid && a.SubmittedAt != null)
             .OrderByDescending(a => a.SubmittedAt).ToListAsync();
         ViewBag.Attempts = attempts;
+        // Review shows the paper as it was sat, not in author order (§QUZ-11).
+        ViewBag.OrderedQuestions = QuizOrdering.Replay(quiz.Questions, attempts.FirstOrDefault()?.QuestionOrder);
 
         // Subjective-grading state + feedback for the latest attempt (§AIG-05/07).
         var pending = new HashSet<int>();

@@ -18,7 +18,8 @@
         <form method="post" asp-action="Submit" asp-route-id="@Model.Id" id="quizForm">
             @Html.AntiForgeryToken()
             @{ int qi = 0; }
-            @foreach (var q in Model.Questions)
+            @{ var askOrder = ViewBag.OrderedQuestions as List<Question> ?? Model.Questions.ToList(); }
+            @foreach (var q in askOrder)
             {
                 qi++;
                 <div class="card mb-3 p-4">

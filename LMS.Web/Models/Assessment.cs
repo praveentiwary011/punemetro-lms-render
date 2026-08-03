@@ -46,6 +46,11 @@ public class Quiz
     public bool IsPublished { get; set; } = true;
     /// <summary>Self-assessments allow unlimited attempts and don't affect grades.</summary>
     public bool IsSelfAssessment { get; set; }
+    /// <summary>Present the questions in a different order to every trainee and every attempt
+    /// (§QUZ-11), so neighbours in a classroom are not on the same question at the same time.
+    /// On by default; a trainer turns it off for a paper whose questions must be worked in
+    /// sequence (one building on the last).</summary>
+    public bool ShuffleQuestions { get; set; } = true;
     /// <summary>True when the questions were drafted by the AI from the course material (§AIG-11).</summary>
     public bool GeneratedByAi { get; set; }
     public DateTime? DueDate { get; set; }
@@ -94,6 +99,10 @@ public class QuizAttempt
     public double Score { get; set; }
     public double MaxScore { get; set; }
     public int AttemptNumber { get; set; } = 1;
+    /// <summary>Question ids in the order this attempt presented them (§QUZ-11). Recorded so the
+    /// learner's review and the trainer's marking show the paper as it was actually sat, rather
+    /// than in author order — and so a later change to the shuffle never rewrites history.</summary>
+    public string? QuestionOrder { get; set; }
     public ICollection<QuizAnswer> Answers { get; set; } = new List<QuizAnswer>();
 }
 
